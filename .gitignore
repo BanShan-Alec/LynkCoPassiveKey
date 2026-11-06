@@ -1,0 +1,23 @@
+# macOS / IDE
+.DS_Store
+.idea/
+*.iml
+
+# Build outputs & binaries (source + docs are versioned; large RE artifacts are not)
+*.apk
+*.ap_
+*.dex
+*.idsig
+*.class
+*.jar
+*.zip
+*.so
+*.log
+geely_dexdump.txt
+
+# Android build directory (debug.keystore is force-added below)
+GeelyKeyRadarApp/build/
+
+# Local machine config
+local.properties
+captures/

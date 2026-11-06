@@ -1,0 +1,93 @@
+digraph PhoneKeyWorkflow {
+    graph [
+        rankdir=LR,
+        splines=polyline,
+        nodesep=0.35,
+        ranksep=0.55,
+        fontname="Hiragino Sans GB",
+        fontsize=20,
+        bgcolor="#FFFFFF",
+        pad=0.3,
+        label="手机车钥匙工作流程（吉利银河 L6 / vivo）",
+        labelloc=t
+    ];
+    node [
+        shape=box,
+        style="rounded,filled",
+        fontname="Hiragino Sans GB",
+        fontsize=11,
+        color="#94A3B8",
+        fillcolor="#F8FAFC",
+        fontcolor="#0F172A",
+        margin="0.10,0.06"
+    ];
+    edge [
+        color="#64748B",
+        fontname="Hiragino Sans GB",
+        fontsize=9,
+        fontcolor="#475569",
+        arrowsize=0.6
+    ];
+
+    subgraph cluster_cloud {
+        label="① 云端 / 凭证";
+        style="rounded,dashed";
+        color="#D97706";
+        fillcolor="#FFFBEB";
+        fontcolor="#92400E";
+        TSP [label="吉利 TSP\n+ vivo 钱包服务端", fillcolor="#FEF3C7", color="#D97706"];
+        Wallet [label="vivo 钱包\nICCOA 车钥匙凭证\n+ SE/TEE 注入", fillcolor="#FEF3C7", color="#D97706"];
+    }
+
+    subgraph cluster_phone {
+        label="② 手机侧";
+        style="rounded,dashed";
+        color="#059669";
+        fillcolor="#ECFDF5";
+        fontcolor="#065F46";
+        VivoNet [label="vivo 智能车载\n(com.vivo.car.networking)\nBLE 扫描 / 连接 / 测距", fillcolor="#D1FAE5", color="#059669"];
+        Geely [label="吉利银河 App\nMiuiService / DigitalKeyBgService\n银河通知栏 RKE", fillcolor="#DBEAFE", color="#2563EB"];
+        Our [label="银河钥匙雷达\n扫描 / 唤醒 / 注入 ScanResult\n点击通知栏按钮", fillcolor="#EDE9FE", color="#7C3AED"];
+        Active [label="通知栏主动 RKE\n「解锁 / 上锁」\n(0x7f0a10cb / 0x7f0a10c7)", shape=box, fillcolor="#FCE7F3", color="#DB2777"];
+        Verify [label="0x0121\n真实锁态确认", shape=box, fillcolor="#F1F5F9", color="#475569"];
+        Bug [label="钱包绑定副作用\nGeely isWalletBind()=true\nstopKeepAlive()\nunregisterScreenUnlockReceiver()", fillcolor="#FEE2E2", color="#DC2626", fontcolor="#991B1B"];
+    }
+
+    subgraph cluster_car {
+        label="③ 车机侧";
+        style="rounded,dashed";
+        color="#0369A1";
+        fillcolor="#F0F9FF";
+        fontcolor="#075985";
+        CarBLE [label="车机 BLE 外设\n广播 / 单连接槽位", fillcolor="#E0F2FE", color="#0284C7"];
+        Passive [label="Geely 被动靠近 PE\n(靠近解锁)", fillcolor="#E0F2FE", color="#0284C7"];
+        ECU [label="车机 ECU\n执行解锁 / 上锁", fillcolor="#BAE6FD", color="#0369A1"];
+        SlotFail [label="单槽位被占用\n车机停止广播\n吉利扫描缓存死锁", fillcolor="#FEE2E2", color="#DC2626", fontcolor="#991B1B"];
+    }
+
+    TSP -> Wallet [label="签发 cardToken / dkCert"];
+    Wallet -> VivoNet [label="移交 BLE 任务"];
+    Wallet -> Bug [label="车钥匙已绑定钱包", color="#DC2626", style=dashed];
+    Bug -> Geely [label="银河主动关闭保活/亮屏广播", color="#DC2626", style=dashed];
+
+    CarBLE -> VivoNet [label="广播", style=dashed];
+    CarBLE -> Geely [label="广播", style=dashed];
+    CarBLE -> Our [label="广播 / RSSI", style=dashed];
+
+    VivoNet -> Geely [label="绑定 MiuiService\nDK1.5 蓝牙鉴权"];
+    Our -> Geely [label="唤醒 MiuiService\n注入 ScanResult"];
+    Geely -> CarBLE [label="连接 + V2 鉴权\n约 3.07s"];
+
+    Geely -> Passive [label="自动靠近策略"];
+    Passive -> ECU [label="车机「靠近解锁」ON\n才执行"];
+    Geely -> Active [label="准备通知栏按钮"];
+    Active -> ECU [label="主动 RKE\n车机开关 OFF 也响应"];
+    Our -> Active [label="performClick\n等同手指点击", color="#7C3AED"];
+    ECU -> Verify [label="真实执行结果"];
+    Our -> Verify [label="查询 / 接收状态帧", style=dashed, color="#7C3AED", constraint=false];
+
+    CarBLE -> SlotFail [label="任一 GATT 先连上", color="#DC2626", style=dashed];
+    SlotFail -> Geely [label="扫不到 / 连不上", color="#DC2626", style=dashed, constraint=false];
+
+    note [shape=note, label="关键结论：\n• 被动 PE 依赖车机「靠近解锁」开关\n• 通知栏 RKE 是主动控制，不受该开关限制\n• 我们的 App 走通知栏 RKE\n• vivo 钱包 BLE 仍依赖 Geely MiuiService 鉴权", fillcolor="#FFFBEB", color="#D97706", fontcolor="#78350F"];
+}

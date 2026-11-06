@@ -1,0 +1,88 @@
+digraph OurAppRkeFlow {
+    graph [
+        rankdir=TB,
+        splines=polyline,
+        nodesep=0.35,
+        ranksep=0.4,
+        fontname="Hiragino Sans GB",
+        fontsize=20,
+        bgcolor="#FFFFFF",
+        pad=0.3,
+        label="银河钥匙雷达：主动 RKE 解锁/上锁流程",
+        labelloc=t
+    ];
+    node [
+        shape=box,
+        style="rounded,filled",
+        fontname="Hiragino Sans GB",
+        fontsize=11,
+        color="#94A3B8",
+        fillcolor="#F8FAFC",
+        fontcolor="#0F172A",
+        margin="0.10,0.06"
+    ];
+    edge [
+        color="#64748B",
+        fontname="Hiragino Sans GB",
+        fontsize=9,
+        fontcolor="#475569",
+        arrowsize=0.6
+    ];
+
+    subgraph cluster_trigger {
+        label="触发源";
+        style="rounded,dashed";
+        color="#7C3AED";
+        fillcolor="#F5F3FF";
+        fontcolor="#5B21B6";
+        Auto [label="自动靠近\n(RSSI 阈值 + 驻留)", fillcolor="#EDE9FE", color="#7C3AED"];
+        Manual [label="电源键三连 / 摇一摇\n磁贴 / 手动按钮", fillcolor="#EDE9FE", color="#7C3AED"];
+        Widget [label="桌面组件\n「解锁 / 上锁」", fillcolor="#EDE9FE", color="#7C3AED"];
+        Confirm [label="组件二次确认\n(可在 ⚙ 设置开启)", shape=diamond, fillcolor="#FCE7F3", color="#DB2777"];
+    }
+
+    Start [label="进入统一解闭锁流程", fillcolor="#DBEAFE", color="#2563EB"];
+    Scan [label="BLE 雷达扫描\n01FE / FDFD / 15FF + VIN", fillcolor="#E0F2FE", color="#0284C7"];
+    Seen [label="90s 内看到\n车辆广播/连接?", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+    NoCar [label="语音/状态：未发现车辆\n不占用 GATT 槽位", fillcolor="#FEE2E2", color="#DC2626", fontcolor="#991B1B"];
+    Connected [label="Geely 已连接\n且 V2 鉴权完成?", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+    Wake [label="唤醒 Geely MiuiService\n注入 ScanResult\n挂起本次指令", fillcolor="#DBEAFE", color="#2563EB"];
+    Wait [label="等待 V2 鉴权\n约 3.07s", fillcolor="#E0F2FE", color="#0284C7"];
+    Notif [label="通知栏显示已连接?\n(按钮可点击)", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+    Queue [label="8s 待连接队列\n5 阶重发 +1.2~6.2s", fillcolor="#FEF3C7", color="#D97706"];
+    Click [label="performClick\n通知栏「解锁 / 上锁」", fillcolor="#FCE7F3", color="#DB2777"];
+    Verify [label="0x0121 真实锁态\n确认成功?", shape=diamond, fillcolor="#FEF3C7", color="#D97706"];
+    Success [label="成功：解锁成功 / 锁车成功\n语音 + 组件/磁贴状态", fillcolor="#D1FAE5", color="#059669"];
+    Fail [label="失败：未发现车辆 / 连接失败\n写日志，等待下次触发", fillcolor="#FEE2E2", color="#DC2626", fontcolor="#991B1B"];
+    Wallet [label="检测到 vivo 钱包绑定\nGeely 保活可能已被关闭\n→ 更积极唤醒/补偿", fillcolor="#FEE2E2", color="#DC2626", fontcolor="#991B1B"];
+
+    Auto -> Start;
+    Manual -> Start;
+    Widget -> Confirm;
+    Confirm -> Start [label="确认/未开启"];
+    Confirm -> End [label="取消", style=dashed, color="#DC2626"];
+
+    Start -> Scan;
+    Scan -> Seen;
+    Seen -> NoCar [label="否"];
+    NoCar -> End;
+    Seen -> Connected [label="是"];
+    Connected -> Click [label="是"];
+    Connected -> Wake [label="否"];
+    Wallet -> Wake [label="补偿", style=dashed, color="#DC2626", constraint=false];
+    Wake -> Wait;
+    Wait -> Notif;
+    Notif -> Click [label="是"];
+    Notif -> Queue [label="否"];
+    Queue -> Notif [label="连接态变化", style=dashed];
+    Click -> Verify;
+    Verify -> Success [label="是"];
+    Verify -> Fail [label="否/超时"];
+    Verify -> Click [label="重试(<上限)", style=dashed, constraint=false];
+    Success -> End;
+    Fail -> End;
+
+    End [label="结束", shape=oval, fillcolor="#F1F5F9", color="#475569"];
+
+    note [shape=note, label="关键点：\n• 不依赖车机「靠近解锁」开关\n• 依赖 Geely 通知栏/BLE 鉴权\n• V2 鉴权前点击会被丢弃 → 排队+重发\n• 失败要查：广播、槽位、通知栏、按钮、0x0121", fillcolor="#FFFBEB", color="#D97706", fontcolor="#78350F"];
+}
