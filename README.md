@@ -6,7 +6,7 @@
 
 [⬇️ 下载 APK](https://github.com/yangyongyongyong/GeelyPassiveKey/releases/latest) · [v4.0 设计说明](docs/36_minimal_generic_passive_key.md) · [逆向知识库](docs/)
 
-当前本地版本 **v4.0.3-min**：修复约8米提前解锁后仍在接近却被上锁的问题，保持已有距离参数，详见 [靠近阶段误锁修复](docs/40_v4_0_3_approach_relock_guard.md)。日志与导出见 [v4.0.2 日志说明](docs/39_v4_0_2_diagnostic_logs.md)，响应与防重复优化见 [v4.0.1 记录](docs/38_v4_0_1_response_and_control_safety.md)。
+当前版本 **v4.0.3-min**：修复约8米提前解锁后仍在接近却被上锁的问题，保持已有距离参数，详见 [靠近阶段误锁修复](docs/40_v4_0_3_approach_relock_guard.md)。日志与导出见 [v4.0.2 日志说明](docs/39_v4_0_2_diagnostic_logs.md)，响应与防重复优化见 [v4.0.1 记录](docs/38_v4_0_1_response_and_control_safety.md)。
 
 ---
 
