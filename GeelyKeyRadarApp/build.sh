@@ -28,8 +28,16 @@ echo "[1/6] 纯逻辑单测"
 javac -source 11 -target 11 -d "$TEST_DIR" \
     "$APP_DIR/src/com/luca/geelykeyradar/PassiveKeyLogic.java" \
     "$APP_DIR/src/com/luca/geelykeyradar/RssiFilter.java" \
-    "$APP_DIR/tests/com/luca/geelykeyradar/PassiveKeyLogicTest.java"
-java -ea -cp "$TEST_DIR" com.luca.geelykeyradar.PassiveKeyLogicTest
+    "$APP_DIR/src/com/luca/geelykeyradar/PendingControl.java" \
+    "$APP_DIR/src/com/luca/geelykeyradar/NotificationEpoch.java" \
+    "$APP_DIR/src/com/luca/geelykeyradar/RotatingFileLog.java" \
+    "$APP_DIR/src/com/luca/geelykeyradar/DiagnosticText.java" \
+    "$APP_DIR/src/com/luca/geelykeyradar/DiagnosticCounters.java" \
+    "$APP_DIR/src/com/luca/geelykeyradar/DiagnosticLogStore.java" \
+    "$APP_DIR/tests/com/luca/geelykeyradar/"*Test.java
+for TEST_CLASS in PassiveKeyLogicTest RssiPipelineTest PendingControlTest NotificationEpochTest RotatingFileLogTest DiagnosticsTest; do
+    java -ea -cp "$TEST_DIR" "com.luca.geelykeyradar.$TEST_CLASS"
+done
 
 echo "[2/6] 编译资源"
 "$BUILD_TOOLS/aapt2" compile --dir "$APP_DIR/res" -o "$BUILD_DIR/res.zip"
@@ -67,6 +75,11 @@ fi
     "$BUILD_DIR/aligned.apk"
 echo "APK: $APK"
 
+if [ "${SKIP_INSTALL:-0}" = "1" ]; then
+    echo "[6/6] 已跳过安装，APK 构建完成"
+    exit 0
+fi
+
 echo "[6/6] 尝试安装到真机"
 export ADB_LIBUSB=0
 ADB_ARGS=()
@@ -88,7 +101,10 @@ if "$ADB" "${ADB_ARGS[@]}" get-state >/dev/null 2>&1; then
     "$ADB" "${ADB_ARGS[@]}" shell input tap 447 2478 >/dev/null 2>&1 || true
     sleep 0.8
     "$ADB" "${ADB_ARGS[@]}" shell input tap 630 2674 >/dev/null 2>&1 || true
-    wait "$PM_PID" || true
+    if ! wait "$PM_PID"; then
+        echo "安装失败，APK 已生成；尚未切换手机上的版本" >&2
+        exit 1
+    fi
     "$ADB" "${ADB_ARGS[@]}" shell cmd notification disallow_listener \
         com.luca.geelykeyradar/com.luca.geelykeyradar.KeyNotificationBridgeService >/dev/null 2>&1 || true
     sleep 0.2

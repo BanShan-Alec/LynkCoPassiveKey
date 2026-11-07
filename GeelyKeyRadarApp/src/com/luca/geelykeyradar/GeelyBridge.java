@@ -65,21 +65,28 @@ final class GeelyBridge {
     }
 
     private static volatile boolean keepAliveBound = false;
+    private static long wakeSequence = 0L;
 
     private static final ServiceConnection KEEP_ALIVE_CONNECTION = new ServiceConnection() {
+        /** 记录系统实际完成绑定的回调，区分调用bindService与绑定就绪。 */
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
+            DiagnosticLog.event("Bridge", "KEEPALIVE_CONNECTED", "component=" + name.getClassName());
             Log.i(TAG, "官方钥匙服务保活绑定成功: " + name);
         }
 
+        /** 官方服务绑定断开时保留生命周期事件。 */
         @Override
         public void onServiceDisconnected(ComponentName name) {
+            DiagnosticLog.event("Bridge", "KEEPALIVE_DISCONNECTED", "component=" + name.getClassName());
             Log.w(TAG, "官方钥匙服务保活绑定断开: " + name);
             keepAliveBound = false;
         }
 
+        /** 官方服务绑定失效时记录原因来源，沿用原恢复策略。 */
         @Override
         public void onBindingDied(ComponentName name) {
+            DiagnosticLog.event("Bridge", "KEEPALIVE_DIED", "component=" + name.getClassName());
             Log.w(TAG, "官方钥匙服务保活绑定失效: " + name);
             keepAliveBound = false;
         }
@@ -104,27 +111,32 @@ final class GeelyBridge {
      * 绑定官方钥匙服务做保活；重复调用是安全的。
      */
     static synchronized void bindKeepAlive(Context context) {
+        DiagnosticLog.initialize(context);
         if (context == null || !isGeelyInstalled(context)) return;
         if (keepAliveBound) return;
 
         try {
             Intent miui = new Intent(ACTION_MIUI_SERVICE);
             miui.setComponent(new ComponentName(GEELY_PKG, GEELY_MIUI_SERVICE));
-            context.bindService(miui, KEEP_ALIVE_CONNECTION,
+            boolean accepted = context.bindService(miui, KEEP_ALIVE_CONNECTION,
                     Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT);
             keepAliveBound = true;
+            DiagnosticLog.detail("Bridge", "KEEPALIVE_BIND_REQUEST", "component=MiuiService accepted=" + accepted);
             Log.i(TAG, "已绑定银河 MiuiService 保活");
         } catch (Throwable t) {
+            DiagnosticLog.bridgeError("Bridge", "KEEPALIVE_BIND_ERROR", t);
             Log.w(TAG, "绑定 MiuiService 失败: " + t.getMessage());
         }
 
         try {
             Intent dk = new Intent(ACTION_DK_START);
             dk.setComponent(new ComponentName(GEELY_PKG, GEELY_DK_SERVICE));
-            context.bindService(dk, KEEP_ALIVE_CONNECTION,
+            boolean accepted = context.bindService(dk, KEEP_ALIVE_CONNECTION,
                     Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT);
+            DiagnosticLog.detail("Bridge", "KEEPALIVE_BIND_REQUEST", "component=DigitalKeyBgService accepted=" + accepted);
         } catch (Throwable ignored) {
             // DigitalKeyBgService 在新版清单里可能是非 exported，失败不影响 MiuiService 主链路。
+            DiagnosticLog.detail("Bridge", "OPTIONAL_KEEPALIVE_BIND_ERROR", DiagnosticText.errorSummary(ignored));
         }
     }
 
@@ -135,27 +147,35 @@ final class GeelyBridge {
      */
     static void wakeAndConnect(Context context, ScanResult scanResult, String carId) {
         if (context == null || scanResult == null) return;
+        DiagnosticLog.initialize(context);
+        long wakeId = ++wakeSequence;
         if (!isGeelyInstalled(context)) {
+            DiagnosticLog.event("Bridge", "WAKE_UNAVAILABLE", "wake_id=" + wakeId + " official_app_installed=false");
             Log.w(TAG, "未安装吉利银河 App，无法触发蓝牙钥匙");
             return;
         }
 
         String safeCarId = (carId == null || carId.trim().isEmpty()) ? "geely-ble" : carId.trim();
         String mac = (scanResult.getDevice() != null) ? scanResult.getDevice().getAddress() : "unknown";
-        Log.i(TAG, "注入 ScanResult 唤醒银河: carId=" + safeCarId + ", mac=" + mac);
+        DiagnosticLog.detail("Bridge", "WAKE_BEGIN", "wake_id=" + wakeId
+                + " addr_id=" + DiagnosticLog.fingerprint(mac) + " rssi=" + scanResult.getRssi());
 
         // 1. 官方 V2 直连核心入口：MiuiService + MiuiReceiver
-        sendMiuiService(context, ACTION_MIUI_CONSUMER, safeCarId, scanResult);
-        sendMiuiService(context, ACTION_MIUI_SERVICE, safeCarId, scanResult);
-        sendMiuiReceiver(context, safeCarId, scanResult);
+        sendMiuiService(context, ACTION_MIUI_CONSUMER, safeCarId, scanResult, wakeId);
+        sendMiuiService(context, ACTION_MIUI_SERVICE, safeCarId, scanResult, wakeId);
+        sendMiuiReceiver(context, safeCarId, scanResult, wakeId);
 
         // 2. 唤醒底层连接管理服务
         try {
             Intent gldk = new Intent();
             gldk.setComponent(new ComponentName(GEELY_PKG, GEELY_GLDK_SERVICE));
             gldk.putExtra("setCarId", safeCarId);
-            context.startService(gldk);
+            ComponentName result = context.startService(gldk);
+            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_RETURN", "wake_id=" + wakeId
+                    + " component=GLDkConnectionService accepted=" + (result != null));
         } catch (Throwable ignored) {
+            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_ERROR", "wake_id=" + wakeId
+                    + " component=GLDkConnectionService " + DiagnosticText.errorSummary(ignored));
         }
 
         // 3. 显式启动 DigitalKeyBgService，突破部分 OEM 的后台启动限制
@@ -164,41 +184,57 @@ final class GeelyBridge {
             dk.setComponent(new ComponentName(GEELY_PKG, GEELY_DK_SERVICE));
             dk.putExtra("setCarId", safeCarId);
             dk.putExtra("ScanResult", scanResult);
-            context.startService(dk);
+            ComponentName result = context.startService(dk);
+            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_RETURN", "wake_id=" + wakeId
+                    + " component=DigitalKeyBgService action=DK_START accepted=" + (result != null));
         } catch (Throwable ignored) {
+            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_ERROR", "wake_id=" + wakeId
+                    + " component=DigitalKeyBgService action=DK_START " + DiagnosticText.errorSummary(ignored));
         }
         try {
             Intent pendingScan = new Intent(ACTION_PENDING_SCAN);
             pendingScan.setComponent(new ComponentName(GEELY_PKG, GEELY_DK_SERVICE));
             pendingScan.putExtra("setCarId", safeCarId);
             pendingScan.putExtra("ScanResult", scanResult);
-            context.startService(pendingScan);
+            ComponentName result = context.startService(pendingScan);
+            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_RETURN", "wake_id=" + wakeId
+                    + " component=DigitalKeyBgService action=PENDING_SCAN accepted=" + (result != null));
         } catch (Throwable ignored) {
+            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_ERROR", "wake_id=" + wakeId
+                    + " component=DigitalKeyBgService action=PENDING_SCAN " + DiagnosticText.errorSummary(ignored));
         }
 
         bindKeepAlive(context);
     }
 
-    private static void sendMiuiService(Context context, String action, String carId, ScanResult scanResult) {
+    /** 每个唤醒入口独立记录系统是否接纳；接纳不等于官方钥匙已鉴权。 */
+    private static void sendMiuiService(Context context, String action, String carId, ScanResult scanResult, long wakeId) {
         try {
             Intent intent = new Intent(action);
             intent.setComponent(new ComponentName(GEELY_PKG, GEELY_MIUI_SERVICE));
             intent.putExtra("setCarId", carId);
             intent.putExtra("ScanResult", scanResult);
-            context.startService(intent);
+            ComponentName result = context.startService(intent);
+            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_RETURN", "wake_id=" + wakeId
+                    + " component=MiuiService action=" + action + " accepted=" + (result != null));
         } catch (Throwable t) {
+            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_ERROR", "wake_id=" + wakeId
+                    + " component=MiuiService action=" + action + " " + DiagnosticText.errorSummary(t));
             Log.w(TAG, "启动 MiuiService(" + action + ") 失败: " + t.getMessage());
         }
     }
 
-    private static void sendMiuiReceiver(Context context, String carId, ScanResult scanResult) {
+    /** 记录广播调用是否返回，避免把无回执的广播标作车辆连接成功。 */
+    private static void sendMiuiReceiver(Context context, String carId, ScanResult scanResult, long wakeId) {
         try {
             Intent intent = new Intent(ACTION_MIUI_CONSUMER);
             intent.setComponent(new ComponentName(GEELY_PKG, GEELY_MIUI_RECEIVER));
             intent.putExtra("setCarId", carId);
             intent.putExtra("ScanResult", scanResult);
             context.sendBroadcast(intent);
+            DiagnosticLog.detail("Bridge", "WAKE_BROADCAST_SENT", "wake_id=" + wakeId + " receiver=MiuiReceiver acknowledged=false");
         } catch (Throwable t) {
+            DiagnosticLog.detail("Bridge", "WAKE_BROADCAST_ERROR", "wake_id=" + wakeId + " " + DiagnosticText.errorSummary(t));
             Log.w(TAG, "广播 MiuiReceiver 失败: " + t.getMessage());
         }
     }

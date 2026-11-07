@@ -7,6 +7,7 @@ import android.bluetooth.le.ScanResult;
 import java.util.List;
 
 import android.os.ParcelUuid;
+import android.os.SystemClock;
 
 /**
  * 一条吉利数字钥匙 BLE 广播。
@@ -152,7 +153,7 @@ final class GeelyAdvertisement {
                 address,
                 name,
                 result.getRssi(),
-                System.currentTimeMillis(),
+                SystemClock.elapsedRealtime(),
                 vinTail2,
                 vinTail3,
                 signature,

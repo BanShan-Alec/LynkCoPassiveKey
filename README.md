@@ -6,6 +6,8 @@
 
 [⬇️ 下载 APK](https://github.com/yangyongyongyong/GeelyPassiveKey/releases/latest) · [v4.0 设计说明](docs/36_minimal_generic_passive_key.md) · [逆向知识库](docs/)
 
+当前本地版本 **v4.0.3-min**：修复约8米提前解锁后仍在接近却被上锁的问题，保持已有距离参数，详见 [靠近阶段误锁修复](docs/40_v4_0_3_approach_relock_guard.md)。日志与导出见 [v4.0.2 日志说明](docs/39_v4_0_2_diagnostic_logs.md)，响应与防重复优化见 [v4.0.1 记录](docs/38_v4_0_1_response_and_control_safety.md)。
+
 ---
 
 ## 一、解决什么毛病
@@ -35,7 +37,7 @@
 **② 调用银河 App 的蓝牙钥匙** ——
 
 - **蓝牙钥匙连接**：把扫到的车机广播注入银河官方 `MiuiService` / `DigitalKeyBgService`，官方钥匙 SDK 自己完成 V2 鉴权、自己连车。
-- **蓝牙钥匙解锁 / 上锁**：找到银河常驻通知栏里的「解锁 / 上锁」按钮，按下它的 PendingIntent（失败时用 DK1.5 广播兜底）。
+- **蓝牙钥匙解锁 / 上锁**：找到银河常驻通知栏里的「解锁 / 上锁」按钮，通过 PendingIntent 或无法提取 PI 时的 View 点击发送一次；统一等待官方就绪，不再叠加广播与多套重发队列。
 
 所以整条链路严格等效于：
 
@@ -54,15 +56,20 @@
 
 | 机制 | 作用 |
 | :--- | :--- |
-| **连接即解锁** | 银河蓝牙钥匙一变成「已连接」，本次接近立刻解锁一次，不等 RSSI 攒到阈值。车机停广播导致的踩空被直接绕开——**治「罚站」的关键**。 |
-| **一次接近只解锁一次** | 进车后不会每 10~20 秒重复解锁；离开 8 秒且银河已断开 12 秒后才重新武装。 |
-| **近场保护** | 最近 6 秒还在 `-78 dBm` 以上，不允许开始上锁倒计时 → **绕到车尾插枪不会被锁**。 |
-| **上锁要驻留** | 默认 `≤ -82 dBm`（约 7~8 米）连续 4.5 秒、至少 3 个新样本才锁；在缓冲带里走动会取消倒计时。 |
+| **官方就绪即处理** | 官方钥匙通知变成「已连接」立即处理一次接近机会，已有请求仅完成它。GATT 测距已连不会提前冒充官方鉴权就绪。 |
+| **一次接近只解锁一次** | 成功交付后不重复；锁后仍连着时须真实近场持续1秒才能再次解锁，口袋补偿与边界抖动不算返回。 |
+| **近场保护** | 最近6秒还在默认 `-78 dBm` 以上则禁止发送上锁；保护与远离计时同时进行。 |
+| **靠近阶段不反向锁车** | 官方连接可以提前解锁；实际进入过车旁后才按原阈值确认离开。没有走到车旁便转身时，需要同一采样来源的持续变弱证据，广播/GATT落差不算离开。 |
+| **上锁要驻留** | 默认未补偿 RSSI `≤ -82 dBm` 连续4.5秒、至少3个新样本；进入缓冲带或采样断档即取消计时。 |
 | **断连不误锁** | GATT 断开 / 蓝牙重启后 10~15 秒内禁止自动上锁。宁可不锁，也不在你车旁误锁。 |
 | **行车不动作** | 银河通知明确显示「行驶中」时，不解锁也不上锁。 |
 | **插线禁控** | 手机插着有线充电（例如在车里用 USB 供电）时默认禁止自动解闭锁。 |
 
 默认解锁阈值 `-75 dBm`（实车调过的提前解锁点）、上锁阈值 `-82 dBm`、驻留 `4.5 s`，都能在 App 里改。
+
+手机遮挡稳定800ms后，接近信号补偿 `+8 dBm`，上锁信号不补偿。界面最多显示10条关键日志，后台轮转日志总容量上限 **4 MiB**，采样和关键动作分别保存。显示“指令已交付”代表已交给银河，未取得车锁执行回执。
+
+遇到解锁慢或漏锁，先记下大概发生时间，再到 App 底部点 **“导出排查日志（ZIP）”** 保存文件。ZIP 包含版本、配置和完整保留日志；车辆地址和名称会替换为本机指纹，不自动上传。详见 [日志排查说明](docs/39_v4_0_2_diagnostic_logs.md)。
 
 ---
 
@@ -86,7 +93,7 @@
 5. 日志出现下面三行就成了：
 
 ```text
-✓ 已自动识别本车蓝牙: GeelyVehicleXXX · XX:XX:... · VIN尾号 XXX
+✓ 已自动识别本车蓝牙: addr_id=... name_id=... identity_id=...
 ✓ 银河蓝牙钥匙已连接
 ✓ 已挂载车机 ACL，开始读取连接态 RSSI
 ```
@@ -116,7 +123,14 @@
 │   │   ├── GeelyAdvertisement.java             # 吉利广播解析
 │   │   ├── VehicleIdentity.java                # 本车蓝牙身份匹配
 │   │   ├── VehicleIdentityStore.java           # 身份持久化 + 阈值开关
-│   │   ├── RssiFilter.java                     # 中值 + Kalman + 非对称 EMA
+│   │   ├── RssiFilter.java                     # 三点中值 + 按时间计算的 EMA
+│   │   ├── PendingControl.java                 # 唯一待发请求和有限重试
+│   │   ├── NotificationEpoch.java              # 旧通知和移除事件隔离
+│   │   ├── RotatingFileLog.java                # 固定容量轮转日志
+│   │   ├── DiagnosticLog.java                  # 跨模块日志与进程退出记录
+│   │   ├── DiagnosticLogStore.java             # 有界写入队列与一致快照导出
+│   │   ├── DiagnosticText.java                 # 车辆身份与凭证脱敏
+│   │   ├── DiagnosticCounters.java             # 扫描、读取和过滤计数
 │   │   ├── MainActivity.java                   # 极简配置页
 │   │   └── BootReceiver.java                   # 开机 / 更新自动拉起
 │   └── tests/                                  # 纯逻辑单测
@@ -134,6 +148,10 @@ APK 不入库（`.gitignore` 排除 `*.apk`），从 [Releases](https://github.c
 | 文档 | 内容 |
 | :--- | :--- |
 | [36](docs/36_minimal_generic_passive_key.md) | **v4.0 极简版**：为什么不需要车机 PE 开关、通用身份学习、状态机与安全约束 |
+| [37](docs/37_20261107_slow_unlock_missed_lock_diagnosis.md) | 2026-11-07慢解锁/漏锁排查：已验证缺陷、离线复现及日志证据边界 |
+| [38](docs/38_v4_0_1_response_and_control_safety.md) | **v4.0.1响应优化**：信号回放对比、通知与GATT隔离、单队列发送、回归与实车验证事项 |
+| [39](docs/39_v4_0_2_diagnostic_logs.md) | **v4.0.2日志增强**：导出操作、日志容量、事件字段、未动作原因与故障复盘步骤 |
+| [40](docs/40_v4_0_3_approach_relock_guard.md) | **v4.0.3靠近误锁修复**：提前解锁与离开资格分开、同源轨迹确认、实车日志时间线和回归 |
 | [01](docs/01_geely_ble_protocol_and_sdk.md) | 银河脱壳、`0x01FE` / `FF15` 广播格式、GATT UUID、AIDL、通知栏控件 ID |
 | [02](docs/02_vivo_wallet_and_iccoa_key.md) | vivo 钱包 / ICCOA 开卡流程与测距公式 |
 | [03](docs/03_root_causes_3m_lock_and_disconnect.md) | **3 米误锁、偶现不自动连蓝牙的源码级根因** |
@@ -155,12 +173,14 @@ APK 不入库（`.gitignore` 排除 `*.apk`），从 [Releases](https://github.c
 bash GeelyKeyRadarApp/build.sh
 ```
 
-先跑 `PassiveKeyLogicTest`，再 `aapt2` → `javac` → `d8` → `apksigner`，检测到真机时自动 `adb install`。产物：`GeelyKeyRadarApp/GeelyPassiveKey.apk`。
+先跑状态机、RSSI完整流程、待发请求、通知版本、日志轮转与诊断导出 **6组测试**，再 `aapt2` → `javac` → `d8` → `apksigner`。检测到真机时尝试安装；`SKIP_INSTALL=1` 可只构建。产物：`GeelyKeyRadarApp/GeelyPassiveKey.apk`。
+
+本地发布压缩包包含当前极简版源码、资源、测试、文档和签名APK；不包含Git目录、构建缓存、签名私钥、本机配置、运行日志、旧版源码归档及历史界面mockups。重新构建时脚本会生成新的调试签名；若要覆盖已安装版本，需要沿用本机原签名密钥。
 
 调试：
 
 ```bash
-adb logcat -s PassiveKey GeelyBridge KeyNotifBridge
+adb logcat -s PassiveDiagnostics PassiveKey GeelyBridge KeyNotifBridge
 adb shell run-as com.luca.geelykeyradar cat files/passive_key.log
 ```
 
@@ -173,6 +193,7 @@ adb shell run-as com.luca.geelykeyradar cat files/passive_key.log
 3. **首次要连一次车**：官方 App 被系统冻结时，先手动打开一次完成学习。
 4. **多辆吉利车相邻**：未学习时只让一个主候选进 RSSI 流；即使注入错车，官方 SDK 也不会鉴权通过，本 App 会重试。
 5. **ROM 差异**：部分 ROM 息屏会暂停 BLE 扫描，建议按第五节加后台白名单。
+6. **非 vivo 手机的 5 秒远距连接延迟坑（已记录，暂未改代码）**：银河 `AbsBleStrategy.connectBle(ScanResult)` 对 `isPhoneVIVO()` 直接发起连接，而对非 vivo 手机会检查 `ScanResult.getRssi() >= min_conn_rssi`，弱信号时放入 `connectDelayThread` 延迟 `5000ms` 再连。后续若在非 vivo 机型上遇到远距唤醒偏慢，可在注入 `MiuiService` 时将 `ScanResult` 副本的 `rssi` 改写为 `-55` 绕过（详见 [docs/36_minimal_generic_passive_key.md](docs/36_minimal_generic_passive_key.md) 第 10 节）。
 
 ---
 

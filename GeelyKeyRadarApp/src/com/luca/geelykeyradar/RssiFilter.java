@@ -4,90 +4,86 @@ import java.util.ArrayDeque;
 import java.util.Arrays;
 
 /**
- * BLE RSSI 平滑器：中值限幅 + 一维卡尔曼 + 非对称 EMA。
+ * BLE RSSI 平滑器：三点中值 + 按真实采样间隔计算的非对称 EMA。
  *
  * 目的不是算“精确距离”，而是在息屏靠近时足够快、在车旁抖动时足够稳。
+ * 原中值限幅 + 低增益卡尔曼 + EMA 会叠加数秒滞后，因此不再串联两层低通。
  */
 final class RssiFilter {
 
-    private static final long GAP_RESET_MS = 8000L;
-    private static final float KALMAN_Q = 0.08f;
-    private static final float KALMAN_R = 2.20f;
-    private static final float EMA_UP = 0.62f; // 走近车辆信号增强时快速跟随，3米处不滞后
-    private static final float EMA_DOWN = 0.16f;
-    private static final float MAX_SLEW_DB_PER_SEC = 40.0f;
-    private static final int WINDOW_MAX = 15;
-    private static final long WINDOW_MS = 4000L;
+    private static final long GAP_RESET_MS = 3000L;
+    private static final double APPROACH_TIME_CONSTANT_MS = 350.0;
+    private static final double DEPARTURE_TIME_CONSTANT_MS = 750.0;
+    private static final int WINDOW_MAX = 3;
+    private static final long WINDOW_MS = 2500L;
 
-    private final ArrayDeque<float[]> window = new ArrayDeque<>();
+    private final ArrayDeque<Sample> window = new ArrayDeque<>();
     private boolean initialized = false;
-    private float kalmanEstimate = -75.0f;
-    private float kalmanErrorCov = 1.0f;
     private float smoothDbm = -75.0f;
-    private float previousSmoothDbm = -75.0f;
     private long lastSampleAtMs = 0L;
+
+    private static final class Sample {
+        final long timeMs;
+        final float dbm;
+
+        /** 使用 long 保存单调时间，避免 float 时间戳丢失毫秒精度。 */
+        Sample(long timeMs, float dbm) {
+            this.timeMs = timeMs;
+            this.dbm = dbm;
+        }
+    }
 
     /**
      * 送入一条原始 RSSI，返回平滑后的值。
      */
     synchronized float update(float rawDbm, long nowMs) {
-        if (!initialized || lastSampleAtMs == 0L || (nowMs - lastSampleAtMs) > GAP_RESET_MS) {
-            reset(rawDbm);
-            lastSampleAtMs = nowMs;
+        if (!Float.isFinite(rawDbm) || rawDbm <= -105f || rawDbm >= 0f) {
+            return smoothDbm;
+        }
+        if (!initialized || (nowMs - lastSampleAtMs) > GAP_RESET_MS) {
+            reset(rawDbm, nowMs);
+            return smoothDbm;
+        }
+        if (nowMs <= lastSampleAtMs) {
             return smoothDbm;
         }
 
         addToWindow(nowMs, rawDbm);
-        float measurement = rawDbm;
-        if (window.size() >= 3) {
-            float median = median();
-            if (Math.abs(rawDbm - median) > 14.0f) {
-                measurement = median + Math.signum(rawDbm - median) * 14.0f;
-            }
+        float measurement = median();
+        double timeConstant = measurement >= smoothDbm
+                ? APPROACH_TIME_CONSTANT_MS : DEPARTURE_TIME_CONSTANT_MS;
+        float alpha = (float) (1.0 - Math.exp(-(nowMs - lastSampleAtMs) / timeConstant));
+        smoothDbm += alpha * (measurement - smoothDbm);
+        if (Math.abs(measurement - smoothDbm) < 0.05f) {
+            smoothDbm = measurement;
         }
-
-        float predictedCov = kalmanErrorCov + KALMAN_Q;
-        float gain = predictedCov / (predictedCov + KALMAN_R);
-        kalmanEstimate = kalmanEstimate + gain * (measurement - kalmanEstimate);
-        kalmanErrorCov = (1.0f - gain) * predictedCov;
-
-        float dtSec = Math.max(0.05f, (nowMs - lastSampleAtMs) / 1000.0f);
-        float alpha = (kalmanEstimate >= smoothDbm) ? EMA_UP : EMA_DOWN;
-        previousSmoothDbm = smoothDbm;
-        smoothDbm = alpha * kalmanEstimate + (1.0f - alpha) * smoothDbm;
-
-        float maxStep = MAX_SLEW_DB_PER_SEC * Math.min(2.0f, dtSec);
-        float delta = smoothDbm - previousSmoothDbm;
-        if (Math.abs(delta) > maxStep) {
-            smoothDbm = previousSmoothDbm + Math.signum(delta) * maxStep;
-        }
-
         lastSampleAtMs = nowMs;
         return smoothDbm;
     }
 
-    synchronized void reset(float rawDbm) {
+    /** 断档后以当前新鲜样本重建窗口，不继承上一次接近的旧信号。 */
+    private void reset(float rawDbm, long nowMs) {
         window.clear();
-        kalmanEstimate = rawDbm;
-        kalmanErrorCov = 1.0f;
         smoothDbm = rawDbm;
-        previousSmoothDbm = rawDbm;
         initialized = true;
-        lastSampleAtMs = 0L;
-        addToWindow(System.currentTimeMillis(), rawDbm);
+        lastSampleAtMs = nowMs;
+        addToWindow(nowMs, rawDbm);
     }
 
+    /** 返回最近滤波值。 */
     synchronized float getSmoothDbm() {
         return smoothDbm;
     }
 
+    /** 返回最后一条有效样本的单调时间。 */
     synchronized long getLastSampleAtMs() {
         return lastSampleAtMs;
     }
 
+    /** 同时限制窗口样本数和样本年龄。 */
     private void addToWindow(long nowMs, float rawDbm) {
-        window.addLast(new float[]{nowMs, rawDbm});
-        while (!window.isEmpty() && (nowMs - window.peekFirst()[0]) > WINDOW_MS) {
+        window.addLast(new Sample(nowMs, rawDbm));
+        while (!window.isEmpty() && (nowMs - window.peekFirst().timeMs) > WINDOW_MS) {
             window.removeFirst();
         }
         while (window.size() > WINDOW_MAX) {
@@ -95,15 +91,16 @@ final class RssiFilter {
         }
     }
 
+    /** 三点中值抑制单次强弱尖峰；两点时保留较强值，避免一次衰落误判离开。 */
     private float median() {
-        int n = window.size();
-        if (n == 0) return -75.0f;
-        float[] values = new float[n];
-        int i = 0;
-        for (float[] item : window) {
-            values[i++] = item[1];
+        int count = window.size();
+        if (count == 0) return smoothDbm;
+        float[] values = new float[count];
+        int index = 0;
+        for (Sample sample : window) {
+            values[index++] = sample.dbm;
         }
         Arrays.sort(values);
-        return values[n / 2];
+        return values[count / 2];
     }
 }

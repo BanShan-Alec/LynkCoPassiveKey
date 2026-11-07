@@ -31,6 +31,15 @@ import android.widget.TextView;
 import android.widget.Toast;
 
 import java.util.Locale;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.OutputStream;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 极简配置页。
@@ -40,6 +49,9 @@ import java.util.Locale;
 public class MainActivity extends Activity {
 
     private static final int REQUEST_BT_PERMISSIONS = 1001;
+    private static final int REQUEST_LOG_EXPORT = 1002;
+    private static final ExecutorService LOG_EXPORT_EXECUTOR = Executors.newSingleThreadExecutor();
+    private static final AtomicBoolean LOG_EXPORT_BUSY = new AtomicBoolean();
     private static final int COLOR_BG = Color.rgb(8, 17, 31);
     private static final int COLOR_CARD = Color.rgb(17, 28, 46);
     private static final int COLOR_TEXT = Color.rgb(229, 231, 235);
@@ -71,6 +83,8 @@ public class MainActivity extends Activity {
     private Switch autoUnlockSwitch;
     private Switch autoLockSwitch;
     private Switch blockChargingSwitch;
+    private Button exportLogButton;
+    private String exportSnapshot = "service_snapshot=unavailable";
 
     private final ServiceConnection connection = new ServiceConnection() {
         @Override
@@ -92,9 +106,14 @@ public class MainActivity extends Activity {
         }
     };
 
+    /** 初始化界面及日志仓库，恢复尚未完成的导出快照。 */
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        DiagnosticLog.initialize(this);
+        if (savedInstanceState != null) {
+            exportSnapshot = savedInstanceState.getString("diagnostic_snapshot", exportSnapshot);
+        }
         buildUi();
     }
 
@@ -122,6 +141,7 @@ public class MainActivity extends Activity {
         super.onPause();
     }
 
+    /** 保持极简配置页，日志区只增加手动导出入口。 */
     private void buildUi() {
         ScrollView scrollView = new ScrollView(this);
         scrollView.setBackgroundColor(COLOR_BG);
@@ -298,6 +318,15 @@ public class MainActivity extends Activity {
         logLp.topMargin = dp(10);
         logCard.addView(logView, logLp);
 
+        LinearLayout.LayoutParams logHintLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        logHintLp.topMargin = dp(10);
+        logCard.addView(text("后台自动记录判定原因、连接耗时及重启信息，最多 4 MiB；导出时隐藏车辆地址与尾号。",
+                12, COLOR_MUTED, Typeface.NORMAL), logHintLp);
+        exportLogButton = button("导出排查日志（ZIP）");
+        exportLogButton.setOnClickListener(view -> chooseLogExportDestination());
+        logCard.addView(exportLogButton, buttonLp());
+
         Button clearLogBtn = button("清空日志");
         clearLogBtn.setOnClickListener(v -> {
             if (service != null) {
@@ -311,7 +340,9 @@ public class MainActivity extends Activity {
         setContentView(scrollView);
     }
 
+    /** 刷新独立的官方连接、测距状态和已交付次数，不把尝试次数当作锁车成功。 */
     private void refreshUi() {
+        if (exportLogButton != null) exportLogButton.setEnabled(!LOG_EXPORT_BUSY.get());
         PassiveKeyService.Status status = service != null ? service.getStatus() : null;
         boolean notificationAccess = KeyNotificationBridgeService.isNotificationListenerEnabled(this);
         boolean batteryWhitelisted = isBatteryWhitelisted();
@@ -343,7 +374,7 @@ public class MainActivity extends Activity {
                             + " · " + status.zone + "\n"
                             + "通知按钮：" + status.buttonDiag + "\n"
                             + "最近动作：" + status.lastAction + "\n"
-                            + "自动解锁/上锁次数：" + status.unlockCount + " / " + status.lockCount
+                            + "指令已交付（解锁/上锁）：" + status.unlockCount + " / " + status.lockCount
             );
 
             if (status.identityLearned) {
@@ -378,6 +409,77 @@ public class MainActivity extends Activity {
                         + "电池白名单：" + yesNo(batteryWhitelisted) + "\n"
                         + "银河 App：" + (geelyInstalled ? "已安装" : "未安装")
         );
+    }
+
+    /** 用户点击后通过系统文件选择器选择本地保存位置，无需存储权限，也不自动发送给他人。 */
+    private void chooseLogExportDestination() {
+        if (LOG_EXPORT_BUSY.get()) return;
+        exportSnapshot = "snapshot_captured_mono_ms=" + android.os.SystemClock.elapsedRealtime() + "\n"
+                + (service == null ? "service_snapshot=unavailable" : service.getDiagnosticSnapshot());
+        Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("application/zip");
+        intent.putExtra(Intent.EXTRA_LOCAL_ONLY, true);
+        intent.putExtra(Intent.EXTRA_TITLE, "GeelyPassiveKey-logs-"
+                + new SimpleDateFormat("yyyyMMdd-HHmmss", Locale.ROOT).format(new Date()) + ".zip");
+        try {
+            startActivityForResult(intent, REQUEST_LOG_EXPORT);
+        } catch (RuntimeException unavailable) {
+            DiagnosticLog.bridgeError("Export", "FILE_PICKER_ERROR", unavailable);
+            Toast.makeText(this, "无法打开系统文件保存器", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** 保留导出快照的采集时刻，切换文件选择器时不丢失状态上下文。 */
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        outState.putString("diagnostic_snapshot", exportSnapshot);
+        super.onSaveInstanceState(outState);
+    }
+
+    /** 在后台生成白名单ZIP并写入用户指定文件，日志写入与车控线程保持分离。 */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != REQUEST_LOG_EXPORT) return;
+        if (resultCode != RESULT_OK || data == null || data.getData() == null) {
+            DiagnosticLog.detail("Export", "EXPORT_CANCELLED", "");
+            return;
+        }
+        if (!LOG_EXPORT_BUSY.compareAndSet(false, true)) return;
+        Context appContext = getApplicationContext();
+        Uri destination = data.getData();
+        String snapshot = service == null ? exportSnapshot
+                : "snapshot_captured_mono_ms=" + android.os.SystemClock.elapsedRealtime() + "\n" + service.getDiagnosticSnapshot();
+        LOG_EXPORT_EXECUTOR.execute(() -> {
+            File temporary = null;
+            String message;
+            try {
+                temporary = File.createTempFile("passive-key-diagnostics-", ".zip", appContext.getCacheDir());
+                Future<File> archive = DiagnosticLog.export(temporary, snapshot);
+                File ready = archive.get();
+                try (FileInputStream input = new FileInputStream(ready);
+                     OutputStream output = appContext.getContentResolver().openOutputStream(destination, "wt")) {
+                    if (output == null) throw new java.io.IOException("输出文件不可用");
+                    byte[] buffer = new byte[16384];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) output.write(buffer, 0, count);
+                }
+                DiagnosticLog.event("Export", "EXPORT_SAVED", "archive_bytes=" + ready.length());
+                message = "排查日志已保存，可将 ZIP 提供给排查人员";
+            } catch (Exception error) {
+                DiagnosticLog.bridgeError("Export", "EXPORT_FAILED", error);
+                message = "日志导出失败，请重试（已有日志仍保留）";
+            } finally {
+                if (temporary != null && temporary.exists() && !temporary.delete()) {
+                    DiagnosticLog.detail("Export", "CACHE_CLEANUP_FAILED", "temporary_archive=true");
+                }
+                LOG_EXPORT_BUSY.set(false);
+            }
+            String finalMessage = message;
+            new Handler(Looper.getMainLooper()).post(() -> Toast.makeText(appContext, finalMessage, Toast.LENGTH_LONG).show());
+        });
+        refreshUi();
     }
 
     private void startPassiveKeyService() {
