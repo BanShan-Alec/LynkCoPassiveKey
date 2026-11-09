@@ -83,6 +83,7 @@ public class MainActivity extends Activity {
     private Switch autoUnlockSwitch;
     private Switch autoLockSwitch;
     private Switch blockChargingSwitch;
+    private Switch blockWirelessChargingSwitch;
     private Button exportLogButton;
     private String exportSnapshot = "service_snapshot=unavailable";
 
@@ -154,7 +155,7 @@ public class MainActivity extends Activity {
                 ScrollView.LayoutParams.WRAP_CONTENT
         ));
 
-        TextView title = text("银河无感钥匙", 26, COLOR_TEXT, Typeface.BOLD);
+        TextView title = text("领克无感钥匙", 26, COLOR_TEXT, Typeface.BOLD);
         root.addView(title);
         TextView subtitle = text("只保留：息屏靠近解锁 / 离开上锁", 14, COLOR_MUTED, Typeface.NORMAL);
         LinearLayout.LayoutParams subtitleLp = new LinearLayout.LayoutParams(
@@ -182,7 +183,7 @@ public class MainActivity extends Activity {
         identityCard.addView(identityView, bodyLp);
 
         TextView identityHint = text(
-                "首次使用：先用银河 App 连接一次车辆，本应用会自动记住这辆车的蓝牙身份。以后不需要再打开银河 App。",
+                "首次使用：先用领克 App 连接一次车辆，本应用会自动记住这辆车的蓝牙身份。以后不需要再打开领克 App。",
                 12, COLOR_MUTED, Typeface.NORMAL
         );
         LinearLayout.LayoutParams hintLp = new LinearLayout.LayoutParams(
@@ -206,11 +207,13 @@ public class MainActivity extends Activity {
         serviceMasterSwitch = switchRow("无感进出服务总开关", "关闭后立即停止扫描与一切解闭锁操作");
         autoUnlockSwitch = switchRow("靠近自动解锁", "距离车辆约 3 米达到解锁阈值时，只解锁一次");
         autoLockSwitch = switchRow("离开自动上锁", "持续远离达到确认秒数后上锁，断连不会误锁");
-        blockChargingSwitch = switchRow("插数据线/充电线后禁止解闭锁", "USB/AC 有线充电时视为在车内或调试中，禁止自动解闭锁");
+        blockChargingSwitch = switchRow("有线充电时禁止自动上锁", "USB/AC 有线充电时视为在车内，禁止自动上锁（仍允许靠近解锁）");
+        blockWirelessChargingSwitch = switchRow("无线充电时禁止自动上锁", "车载无线充电时视为在车内，禁止自动上锁（含3秒断充防抖，仍允许靠近解锁）");
         switchCard.addView(serviceMasterSwitch);
         switchCard.addView(autoUnlockSwitch);
         switchCard.addView(autoLockSwitch);
         switchCard.addView(blockChargingSwitch);
+        switchCard.addView(blockWirelessChargingSwitch);
         serviceMasterSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
             public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
@@ -246,6 +249,18 @@ public class MainActivity extends Activity {
                     service.setBlockWhenChargingEnabled(isChecked);
                 } else {
                     new VehicleIdentityStore(MainActivity.this).setBlockWhenChargingEnabled(isChecked);
+                }
+                refreshUi();
+            }
+        });
+        blockWirelessChargingSwitch.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+            @Override
+            public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+                if (settingSwitches) return;
+                if (service != null) {
+                    service.setBlockWhenWirelessChargingEnabled(isChecked);
+                } else {
+                    new VehicleIdentityStore(MainActivity.this).setBlockWhenWirelessChargingEnabled(isChecked);
                 }
                 refreshUi();
             }
@@ -290,8 +305,8 @@ public class MainActivity extends Activity {
         LinearLayout helpCard = card();
         helpCard.addView(text("使用说明", 16, COLOR_ACCENT, Typeface.BOLD));
         TextView help = text(
-                "1. 安装并登录银河 App，完成蓝牙钥匙绑定。\n"
-                        + "2. 靠近车辆，让银河 App 成功连接一次。\n"
+                "1. 安装并登录领克 App，完成蓝牙钥匙绑定。\n"
+                        + "2. 靠近车辆，让领克 App 成功连接一次。\n"
                         + "3. 本应用自动识别本车蓝牙，不需要填写 VIN 或 MAC。\n"
                         + "4. 保持本应用后台运行；息屏放口袋，靠近解锁，离开上锁。\n"
                         + "5. 若系统清理后台，请在电池设置里允许本应用后台高耗电。",
@@ -354,7 +369,7 @@ public class MainActivity extends Activity {
                     + "蓝牙权限：" + yesNo(btPermission) + "\n"
                     + "通知使用权：" + yesNo(notificationAccess) + "\n"
                     + "电池白名单：" + yesNo(batteryWhitelisted) + "\n"
-                    + "银河 App：" + (geelyInstalled ? "已安装" : "未安装"));
+                    + "领克 App：" + (geelyInstalled ? "已安装" : "未安装"));
             identityView.setText("等待服务启动");
             VehicleIdentityStore store = new VehicleIdentityStore(this);
             thresholdView.setText(String.format(Locale.US,
@@ -365,11 +380,13 @@ public class MainActivity extends Activity {
                     "服务总开关：" + (status.serviceEnabled ? "开启 (运行中)" : "已关闭 (完全停止操作)") + "\n"
                             + "蓝牙：" + (status.bluetoothOn ? "已开启" : "未开启")
                             + (status.scanning ? " · 扫描中" : "") + "\n"
-                            + "银河钥匙：" + (status.geelyConnected ? "已连接" : "未连接") + "\n"
+                            + "领克钥匙：" + (status.geelyConnected ? "已连接" : "未连接") + "\n"
                             + "连接态 RSSI：" + (status.gattConnected ? "已挂载" : "未挂载") + "\n"
-                            + "有线充电：" + (status.wiredCharging
-                                    ? (status.blockWhenCharging ? "已插线 (禁控保护中)" : "已插线 (未禁控)")
-                                    : "未插线") + "\n"
+                            + "充电状态：" + (status.wiredCharging
+                                    ? (status.blockWhenCharging ? "有线充电 (防锁保护中)" : "有线充电 (未禁控)")
+                                    : status.wirelessCharging
+                                    ? (status.blockWhenWirelessCharging ? "车载无线充电中 (防锁保护中)" : "车载无线充电中 (未禁控)")
+                                    : "未充电") + "\n"
                             + "信号：" + (status.rssi > -127 ? status.rssi + " dBm" : "--")
                             + " · " + status.zone + "\n"
                             + "通知按钮：" + status.buttonDiag + "\n"
@@ -383,7 +400,7 @@ public class MainActivity extends Activity {
                                 + "地址：" + (status.vehicleAddress.isEmpty() ? "--" : status.vehicleAddress)
                 );
             } else {
-                identityView.setText("未学习\n请先用银河 App 连接一次车辆；连接成功后本应用会自动记住它。");
+                identityView.setText("未学习\n请先用领克 App 连接一次车辆；连接成功后本应用会自动记住它。");
             }
 
             settingSwitches = true;
@@ -391,9 +408,11 @@ public class MainActivity extends Activity {
             autoUnlockSwitch.setChecked(status.autoUnlock);
             autoLockSwitch.setChecked(status.autoLock);
             blockChargingSwitch.setChecked(status.blockWhenCharging);
+            blockWirelessChargingSwitch.setChecked(status.blockWhenWirelessCharging);
             autoUnlockSwitch.setEnabled(status.serviceEnabled);
             autoLockSwitch.setEnabled(status.serviceEnabled);
             blockChargingSwitch.setEnabled(status.serviceEnabled);
+            blockWirelessChargingSwitch.setEnabled(status.serviceEnabled);
             settingSwitches = false;
 
             thresholdView.setText(String.format(Locale.US,
@@ -407,7 +426,7 @@ public class MainActivity extends Activity {
                         + "通知使用权：" + yesNo(notificationAccess)
                         + (notificationAccess ? "" : "（必需，否则无法点官方通知栏按钮）") + "\n"
                         + "电池白名单：" + yesNo(batteryWhitelisted) + "\n"
-                        + "银河 App：" + (geelyInstalled ? "已安装" : "未安装")
+                        + "领克 App：" + (geelyInstalled ? "已安装" : "未安装")
         );
     }
 
@@ -584,7 +603,7 @@ public class MainActivity extends Activity {
         input.setSingleLine(true);
         new AlertDialog.Builder(this)
                 .setTitle("按车架号后3位锁定本车")
-                .setMessage("吉利银河蓝牙广播名为 GeelyVehicle+车架号后3位。填入后3位（如 123）可在首次靠近前直接锁定本车；不填也会在靠近车辆或银河连接时自动识别。")
+                .setMessage("领克蓝牙广播名为 LynkCo+车架号后3位（或自动识别）。填入后3位（如 123）可在首次靠近前直接锁定本车；不填也会在靠近车辆或领克连接时自动识别。")
                 .setView(input)
                 .setNegativeButton("取消", null)
                 .setPositiveButton("确定", (dialog, which) -> {
@@ -679,7 +698,7 @@ public class MainActivity extends Activity {
     private void confirmResetIdentity() {
         new AlertDialog.Builder(this)
                 .setTitle("重新学习本车")
-                .setMessage("清除已记住的蓝牙身份。下次用银河 App 连接车辆后，本应用会重新识别。")
+                .setMessage("清除已记住的蓝牙身份。下次用领克 App 连接车辆后，本应用会重新识别。")
                 .setNegativeButton("取消", null)
                 .setPositiveButton("清除", (dialog, which) -> {
                     if (service != null) {

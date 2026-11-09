@@ -29,7 +29,7 @@ final class GeelyBridge {
 
     private static final String TAG = "GeelyBridge";
 
-    static final String GEELY_PKG = "com.geelygalaxy.customer";
+    static final String GEELY_PKG = "com.lynkco.customer";
     static final String GEELY_DK_SERVICE = "com.geely.snc.digitalkey.base.service.DigitalKeyBgService";
     static final String GEELY_MIUI_SERVICE = "com.ecarx.blekey.thirdadapter.service.MiuiService";
     static final String GEELY_MIUI_RECEIVER = "com.ecarx.blekey.thirdadapter.receiver.MiuiReceiver";
@@ -122,7 +122,7 @@ final class GeelyBridge {
                     Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT);
             keepAliveBound = true;
             DiagnosticLog.detail("Bridge", "KEEPALIVE_BIND_REQUEST", "component=MiuiService accepted=" + accepted);
-            Log.i(TAG, "已绑定银河 MiuiService 保活");
+            Log.i(TAG, "已绑定领克 MiuiService 保活");
         } catch (Throwable t) {
             DiagnosticLog.bridgeError("Bridge", "KEEPALIVE_BIND_ERROR", t);
             Log.w(TAG, "绑定 MiuiService 失败: " + t.getMessage());
@@ -151,11 +151,11 @@ final class GeelyBridge {
         long wakeId = ++wakeSequence;
         if (!isGeelyInstalled(context)) {
             DiagnosticLog.event("Bridge", "WAKE_UNAVAILABLE", "wake_id=" + wakeId + " official_app_installed=false");
-            Log.w(TAG, "未安装吉利银河 App，无法触发蓝牙钥匙");
+            Log.w(TAG, "未安装领克 App，无法触发蓝牙钥匙");
             return;
         }
 
-        String safeCarId = (carId == null || carId.trim().isEmpty()) ? "geely-ble" : carId.trim();
+        String safeCarId = (carId == null || carId.trim().isEmpty()) ? "lynkco-ble" : carId.trim();
         String mac = (scanResult.getDevice() != null) ? scanResult.getDevice().getAddress() : "unknown";
         DiagnosticLog.detail("Bridge", "WAKE_BEGIN", "wake_id=" + wakeId
                 + " addr_id=" + DiagnosticLog.fingerprint(mac) + " rssi=" + scanResult.getRssi());

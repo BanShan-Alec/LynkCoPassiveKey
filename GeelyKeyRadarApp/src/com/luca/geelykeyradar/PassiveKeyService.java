@@ -104,7 +104,11 @@ public class PassiveKeyService extends Service implements SensorEventListener {
     private volatile boolean autoLock = true;
     private volatile boolean serviceEnabled = true;
     private volatile boolean blockWhenCharging = true;
+    private volatile boolean blockWhenWirelessCharging = true;
     private volatile boolean wiredCharging = false;
+    private volatile boolean wirelessCharging = false;
+    private volatile long wirelessDisconnectedAtMs = 0L;
+    private static final long WIRELESS_DISCONNECT_DEBOUNCE_MS = 3000L;
     private volatile float unlockDbm = VehicleIdentityStore.DEFAULT_UNLOCK_DBM;
     private volatile float lockDbm = VehicleIdentityStore.DEFAULT_LOCK_DBM;
     private volatile long lockDwellMs = VehicleIdentityStore.DEFAULT_LOCK_DWELL_MS;
@@ -195,7 +199,10 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         public boolean autoUnlock;
         public boolean autoLock;
         public boolean blockWhenCharging;
+        public boolean blockWhenWirelessCharging;
         public boolean wiredCharging;
+        public boolean wirelessCharging;
+        public boolean chargingLockBlocked;
         public float unlockDbm;
         public float lockDbm;
         public long lockDwellMs;
@@ -235,6 +242,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         identity = identityStore.load();
         serviceEnabled = identityStore.isServiceEnabled();
         blockWhenCharging = identityStore.isBlockWhenChargingEnabled();
+        blockWhenWirelessCharging = identityStore.isBlockWhenWirelessChargingEnabled();
         autoUnlock = identityStore.isAutoUnlockEnabled();
         autoLock = identityStore.isAutoLockEnabled();
         unlockDbm = identityStore.getUnlockDbm();
@@ -255,7 +263,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         }
 
         initProximitySensor();
-        refreshWiredChargingState(null);
+        refreshChargingState(null);
         registerSystemReceiver();
         KeyNotificationBridgeService.setStateListener(notificationStateListener);
         if (serviceEnabled) {
@@ -362,7 +370,10 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         status.autoUnlock = autoUnlock;
         status.autoLock = autoLock;
         status.blockWhenCharging = blockWhenCharging;
+        status.blockWhenWirelessCharging = blockWhenWirelessCharging;
         status.wiredCharging = wiredCharging;
+        status.wirelessCharging = wirelessCharging;
+        status.chargingLockBlocked = isLockChargingBlocked();
         status.unlockDbm = unlockDbm;
         status.lockDbm = lockDbm;
         status.lockDwellMs = lockDwellMs;
@@ -374,7 +385,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         status.vehicleName = identity != null ? identity.displayName() : "";
         status.vehicleAddress = identity != null ? identity.address : "";
         status.zone = !serviceEnabled ? "无感进出服务已关闭"
-                : (isChargingBlocked() ? "已插充电线 · 禁止自动解闭锁"
+                : (isLockChargingBlocked() ? (wiredCharging ? "已插充电线" : "车载无线充电中") + " · 已激活防锁保护"
                 : (signalFresh ? lastZone : "不在车辆附近 (无信号)"));
         status.lastAction = lastAction;
         status.source = signalFresh ? lastSource : "";
@@ -432,30 +443,58 @@ public class PassiveKeyService extends Service implements SensorEventListener {
     }
 
     /**
-     * 插充电线后禁止解闭锁开关（USB/AC 有线充电认为人在驾驶室或调试中，无线充电不拦截）。
+     * 有线充电禁止自动上锁开关（USB/AC 有线充电时视为在车内，禁止自动上锁）。
      */
     public void setBlockWhenChargingEnabled(boolean enabled) {
         blockWhenCharging = enabled;
         identityStore.setBlockWhenChargingEnabled(enabled);
-        if (isChargingBlocked()) {
-            cancelPendingControl("插线禁控保护");
+        boolean locked = isLockChargingBlocked();
+        logic.setChargingLockBlocked(locked);
+        if (locked) {
+            cancelPendingControl("有线充电防锁保护");
         }
-        appendLog("插充电线禁止解闭锁: " + (enabled ? "开" : "关")
+        appendLog("有线充电禁止自动上锁: " + (enabled ? "开" : "关")
                 + (wiredCharging ? " (当前已插线)" : ""));
         updateNotificationIfNeeded(true);
     }
 
     /**
-     * 是否因插着 USB/AC 有线充电线而禁止操作车锁。
+     * 车载无线充电禁止自动上锁开关（车载无线充电时视为在车内，含 3 秒断充防抖缓冲）。
      */
-    private boolean isChargingBlocked() {
-        return blockWhenCharging && wiredCharging;
+    public void setBlockWhenWirelessChargingEnabled(boolean enabled) {
+        blockWhenWirelessCharging = enabled;
+        identityStore.setBlockWhenWirelessChargingEnabled(enabled);
+        boolean locked = isLockChargingBlocked();
+        logic.setChargingLockBlocked(locked);
+        if (locked) {
+            cancelPendingControl("无线充防锁保护");
+        }
+        appendLog("车载无线充电禁止自动上锁: " + (enabled ? "开" : "关")
+                + (wirelessCharging ? " (当前正在无线充)" : ""));
+        updateNotificationIfNeeded(true);
     }
 
     /**
-     * 读取或更新当前是否处于 USB/AC 有线充电状态（无线充电不触发）。
+     * 是否处于无线充电断开防抖缓冲期（颠簸闪断时维持保护 3 秒）。
      */
-    private void refreshWiredChargingState(Intent batteryIntent) {
+    private boolean isWirelessDebounceActive() {
+        return wirelessDisconnectedAtMs > 0L
+                && (SystemClock.elapsedRealtime() - wirelessDisconnectedAtMs) < WIRELESS_DISCONNECT_DEBOUNCE_MS;
+    }
+
+    /**
+     * 是否因充电而禁止自动上锁（非对称保护：仅用于上锁分支）。
+     */
+    private boolean isLockChargingBlocked() {
+        boolean wiredBlocked = blockWhenCharging && wiredCharging;
+        boolean wirelessBlocked = blockWhenWirelessCharging && (wirelessCharging || isWirelessDebounceActive());
+        return wiredBlocked || wirelessBlocked;
+    }
+
+    /**
+     * 读取或更新当前充电状态（支持 USB/AC 有线充电与车载无线充电，含 3 秒断充防抖）。
+     */
+    private void refreshChargingState(Intent batteryIntent) {
         try {
             Intent sticky = batteryIntent;
             if (sticky == null) {
@@ -464,14 +503,32 @@ public class PassiveKeyService extends Service implements SensorEventListener {
             if (sticky == null) return;
             int plugged = sticky.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
             boolean wired = (plugged & (BatteryManager.BATTERY_PLUGGED_AC | BatteryManager.BATTERY_PLUGGED_USB)) != 0;
-            if (wired != wiredCharging) {
-                wiredCharging = wired;
-                if (wired && blockWhenCharging) {
-                    cancelPendingControl("检测到有线充电");
-                    appendLog("🔌 检测到已插充电线：已激活车内禁控保护，禁止自动解锁/上锁");
-                } else if (!wired) {
-                    appendLog("🔌 充电线已拔出：恢复正常无感解锁/上锁");
+            boolean wireless = (plugged & BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0;
+            long now = SystemClock.elapsedRealtime();
+
+            if (!wireless && wirelessCharging) {
+                // 无线充断开：启动 3 秒防抖缓冲
+                wirelessDisconnectedAtMs = now;
+            } else if (wireless) {
+                // 无线充恢复或保持：清除防抖
+                wirelessDisconnectedAtMs = 0L;
+            }
+
+            boolean wasLockBlocked = isLockChargingBlocked();
+            wiredCharging = wired;
+            wirelessCharging = wireless;
+            boolean nowLockBlocked = isLockChargingBlocked();
+
+            logic.setChargingLockBlocked(nowLockBlocked);
+
+            if (nowLockBlocked != wasLockBlocked) {
+                if (nowLockBlocked) {
+                    cancelPendingControl("检测到车载充电（激活防误锁）");
+                    appendLog("🔌 检测到车载充电中（" + (wired ? "有线" : "无线") + "）：已激活车内防误锁保护，禁止自动上锁");
+                } else {
+                    appendLog("🔌 充电已断开且防抖结束：恢复正常无感上锁");
                 }
+                updateNotificationIfNeeded(true);
             }
         } catch (Throwable ignored) {
         }
@@ -1047,16 +1104,17 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         lastSource = source;
         if (ad != null) currentAd = ad;
 
-        boolean chargingBlocked = isChargingBlocked();
-        boolean driving = isDriving(now) || chargingBlocked;
+        boolean chargingLockBlocked = isLockChargingBlocked();
+        boolean driving = isDriving(now);
+        logic.setChargingLockBlocked(chargingLockBlocked);
         PassiveKeyLogic.Action action = logic.onSample(
                 effective,
                 smooth,
                 now,
                 geelyConnected,
                 driving,
-                autoUnlock && !chargingBlocked,
-                autoLock && !chargingBlocked,
+                autoUnlock,
+                autoLock && !chargingLockBlocked,
                 source.startsWith("GATT") ? "GATT" : "SCAN"
         );
         recordDecision(action, now);
@@ -1107,8 +1165,8 @@ public class PassiveKeyService extends Service implements SensorEventListener {
 
     /** 显示当前判定区域和连续远离确认进度。 */
     private String zoneText(float distanceDbm, float approachDbm) {
-        if (isChargingBlocked()) {
-            return "已插充电线 · 禁止解闭锁";
+        if (isLockChargingBlocked()) {
+            return (wiredCharging ? "已插充电线" : "车载无线充电中") + " · 已激活防锁保护";
         }
         long now = SystemClock.elapsedRealtime();
         if (lastSampleAtMs == 0L || (now - lastSampleAtMs) > SIGNAL_EXPIRE_UI_MS) {
@@ -1139,7 +1197,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
     /** 创建固定十二秒期限的请求；次数仅在通知按钮实际发送成功后累加。 */
     private void beginControl(PassiveKeyLogic.Action action, float effectiveDbm, String source) {
         long now = SystemClock.elapsedRealtime();
-        if (!serviceEnabled || isChargingBlocked() || isDriving(now)) {
+        if (!serviceEnabled || (action == PassiveKeyLogic.Action.LOCK && isLockChargingBlocked()) || isDriving(now)) {
             DiagnosticLog.event("Control", "REQUEST_BLOCKED", "action=" + action + " " + signalDiagnostic(now));
             logic.onControlFailed(action, now);
             return;
@@ -1181,7 +1239,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
             cancelPendingControl("等待银河就绪超时，未发送");
             return;
         }
-        if (!running || !serviceEnabled || isChargingBlocked()
+        if (!running || !serviceEnabled || (action == PassiveKeyLogic.Action.LOCK && isLockChargingBlocked())
                 || !logic.isPendingActionValid(action, now, isDriving(now), autoUnlock, autoLock)) {
             cancelPendingControl("距离证据已失效或已进入禁控状态");
             return;
@@ -1276,8 +1334,8 @@ public class PassiveKeyService extends Service implements SensorEventListener {
             wakeAttempts = 0;
             appendLog("✓ 银河蓝牙钥匙已连接");
             maybeLearnVehicle(now);
-            boolean blocked = isDriving(now) || isChargingBlocked();
-            PassiveKeyLogic.Action action = logic.onOfficialConnected(now, blocked, autoUnlock && !blocked);
+            boolean driving = isDriving(now);
+            PassiveKeyLogic.Action action = logic.onOfficialConnected(now, driving, autoUnlock && !driving);
             DiagnosticLog.event("Decision", "OFFICIAL_READY_RESULT", "action=" + action
                     + " " + logic.diagnosticSnapshot(now));
             if (action == PassiveKeyLogic.Action.UNLOCK) {
@@ -1673,10 +1731,10 @@ public class PassiveKeyService extends Service implements SensorEventListener {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
                 handleAclBroadcast(device, false, now);
             } else if (Intent.ACTION_BATTERY_CHANGED.equals(action)) {
-                refreshWiredChargingState(intent);
+                refreshChargingState(intent);
             } else if (Intent.ACTION_POWER_CONNECTED.equals(action)
                     || Intent.ACTION_POWER_DISCONNECTED.equals(action)) {
-                refreshWiredChargingState(null);
+                refreshChargingState(null);
             } else if (Intent.ACTION_SCREEN_OFF.equals(action)) {
                 DiagnosticLog.event("Power", "SCREEN_OFF", "run=" + serviceRun + " " + signalDiagnostic(now));
                 screenOn = false;
@@ -1884,7 +1942,8 @@ public class PassiveKeyService extends Service implements SensorEventListener {
                 onGeelyConnectionChanged(notifConnected, now);
             }
             processPendingControl(false);
-            if (logic.onTick(now, notifConnected, isDriving(now) || isChargingBlocked())) {
+            logic.setChargingLockBlocked(isLockChargingBlocked());
+            if (logic.onTick(now, notifConnected, isDriving(now) || isLockChargingBlocked())) {
                 appendLog("🔄 已离开车辆且蓝牙断开满 12s，已重新武装下一次靠近自动解锁");
             }
             ensureGattAttached(now);
@@ -1937,7 +1996,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         }
         return builder
                 .setSmallIcon(R.drawable.ic_notification)
-                .setContentTitle("银河无感钥匙")
+                .setContentTitle("领克无感钥匙")
                 .setContentText(text == null ? "" : text)
                 .setContentIntent(pendingIntent)
                 .setOngoing(true)
@@ -2075,7 +2134,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
                 lastRawRssi, lastSmoothRssi, lastApproachRssi, proximityCovered,
                 lastSampleAtMs == 0L ? -1L : now - lastSampleAtMs, lastSource, geelyConnected, gattConnected,
                 dwellStart == 0L ? 0L : now - dwellStart, logic.getLockDwellSamples(),
-                logic.hasBeenNear(), logic.isApproachLatched(), isChargingBlocked(), isDriving(now),
+                logic.hasBeenNear(), logic.isApproachLatched(), isLockChargingBlocked(), isDriving(now),
                 pendingControl.getAction());
     }
 }

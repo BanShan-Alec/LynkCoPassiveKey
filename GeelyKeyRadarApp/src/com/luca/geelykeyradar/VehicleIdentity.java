@@ -130,7 +130,7 @@ final class VehicleIdentity {
 
     String displayName() {
         if (!name.isEmpty()) return name;
-        if (!vinTail2.isEmpty()) return "GeelyVehicle??" + vinTail2;
+        if (!vinTail2.isEmpty()) return "LynkCo??" + vinTail2;
         if (!address.isEmpty()) return address;
         return "未知车辆";
     }

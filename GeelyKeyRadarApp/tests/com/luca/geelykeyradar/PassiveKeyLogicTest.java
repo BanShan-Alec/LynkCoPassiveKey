@@ -36,6 +36,7 @@ public final class PassiveKeyLogicTest {
         abortedEarlyApproachStillLocksAfterRealWeakening();
         switchingRssiSourceDoesNotPretendDeparture();
         sourceSwitchRestartsContinuousFarDwell();
+        asymmetricChargingInhibitAllowsUnlockBlocksLock();
         System.out.println("PassiveKeyLogicTest passed");
     }
 
@@ -539,6 +540,28 @@ public final class PassiveKeyLogicTest {
             if (logic.onSample(-90f, time, true, false, true, true) == PassiveKeyLogic.Action.LOCK) return time;
         }
         throw new AssertionError("连续远场未生成上锁请求");
+    }
+
+    /** 充电非对称保护：充电中放行靠近解锁，同时彻底拦截自动上锁 */
+    private static void asymmetricChargingInhibitAllowsUnlockBlocksLock() {
+        PassiveKeyLogic logic = new PassiveKeyLogic();
+        logic.setChargingLockBlocked(true);
+
+        // 1. 随身带充电宝靠近车辆（进入解锁阈值 -75dBm）：必须允许解锁！
+        check(logic.onSample(-70f, 1_000L, false, false, true, true) == PassiveKeyLogic.Action.UNLOCK,
+                "充电中靠近车辆必须允许解锁（防止随身充电宝罚站）");
+        logic.onControlSent(PassiveKeyLogic.Action.UNLOCK, 1_000L);
+
+        // 2. 人在车内充电，偶发信号深衰落到 -85dBm：绝对不能锁车！
+        for (long time = 2_000L; time <= 10_000L; time += 500L) {
+            check(logic.onSample(-85f, -85f, time, true, false, false, true) == PassiveKeyLogic.Action.NONE,
+                    "充电状态下远场信号必须被拦截，禁止上锁");
+        }
+
+        // 3. 断开充电（下车拔线/拿起手机）：持续远场后正常锁车
+        logic.setChargingLockBlocked(false);
+        check(feedUntilLock(logic, 10_500L) >= 15_000L,
+                "断开充电离开后正常触发上锁");
     }
 
     /** 断言失败时保留场景语义。 */

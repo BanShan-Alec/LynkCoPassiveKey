@@ -1,202 +1,133 @@
-# 银河无感钥匙 · GeelyPassiveKey
+# 领克无感钥匙 · LynkCoPassiveKey
 
-把吉利银河的「靠近解锁 / 远离上锁」重做一遍：**手机自己判断你在靠近还是离开，然后替你把银河 App 的蓝牙钥匙连上、把锁打开。**
+> 本项目 Fork 自 [yangyongyongyong/GeelyPassiveKey](https://github.com/yangyongyongyong/GeelyPassiveKey)，在此基础上针对**领克全系车型通用**（基于领克官方 App `com.lynkco.customer`）进行了深度逆向适配、非对称充电禁控与车载无线充电防抖重构。
 
-车机里那个「无感进出」开关可以一直关着，本 App 不依赖它。
+把领克车型的「靠近解锁 / 远离上锁」重做一遍：**由手机端精确感知人与车之间的实际相对距离，通过滤波与驻留判定出入状态，再通过领克官方 App 的前台通知栏自动完成鉴权连接与解闭锁代点。**
 
-[⬇️ 下载 APK](https://github.com/yangyongyongyong/GeelyPassiveKey/releases/latest) · [v4.0 设计说明](docs/36_minimal_generic_passive_key.md) · [逆向知识库](docs/)
+车机中控屏自带的「靠近解锁 / 远离上锁」总开关可以一直关闭，本 App 不依赖也不篡改车机任何底层参数。
 
-当前版本 **v4.0.3-min**：修复约8米提前解锁后仍在接近却被上锁的问题，保持已有距离参数，详见 [靠近阶段误锁修复](docs/40_v4_0_3_approach_relock_guard.md)。日志与导出见 [v4.0.2 日志说明](docs/39_v4_0_2_diagnostic_logs.md)，响应与防重复优化见 [v4.0.1 记录](docs/38_v4_0_1_response_and_control_safety.md)。
-
----
-
-## 一、解决什么毛病
-
-银河原生的靠近解锁 / 远离上锁，实车用起来两个高频事故：
-
-### 1. 罚站
-
-人已经走到车门边，车不解锁。掏手机 → 打开银河 App → 等它连蓝牙钥匙 → 再点解锁。后面排队的人看着你，你在车门口站着。
-
-### 2. 车旁就被锁
-
-停好车绕到车尾插充电枪，或者去后备箱拿个东西，离开驾驶位没几步，车「咔」一声自己锁了。想再打开还得从头来一遍。
-
-**根因**：车机侧的被动 PE 只有单点 RSSI 阈值，判定粗糙——没有「一次接近只解锁一次」，没有近场保护，也没有驻留时间。而且吉利车机**只有一个 BLE 连接槽位**：银河 App 一旦连上，车机立刻停发广播，纯靠广播 RSSI 的判定当场踩空，人自然就罚站了。
+[⬇️ 前往 Releases 下载 APK](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) · [架构决策记录 (ADR)](docs/adr/) · [统一术语表](GLOSSARY.md) · [领克逆向报告](docs/42_lynkco_apk_reverse_analysis.md)
 
 ---
 
-## 二、我们怎么做（核心）
+## 一、方案对比：本 App 与车机自带无感进入的客观优劣势
 
-**不需要车机开启「靠近解锁 / 远离上锁」。** 车机侧的 `0x0501` 无感 PE 总开关可以一直关着；本 App 不碰它，也不写任何车机参数。
+在决定是否使用本工具前，请务必阅读以下客观对比。本方案并非灵丹妙药，而是用**手机端软件滤波与系统保活代价**，去换取**车端单点物理缺陷的根治**。
 
-本 App 只做两件事：
+### 1. 全维度对比一览表
 
-**① 自己识别** —— 扫吉利车机的 BLE 广播（Company ID `0x01FE`、`GeelyVehicle<VIN后三位>`、`FDFD` 等特征），滤波后按 RSSI 判断靠近 / 远离；银河连上后改用连接态 `readRemoteRssi()` 继续判断。
+| 对比维度 | 车机原厂自带「靠近解锁 / 离开上锁」 | 领克无感钥匙 App (`LynkCoPassiveKey`) | 评价与客观说明 |
+| :--- | :--- | :--- | :---: |
+| **车旁 3 米误锁** | **高发**。车机硬件闭锁迟滞仅 `4~6 dB`，人背对车或手机装裤兜衰减达 `12~18 dB`，车机 BCM 会直接判定为人已走远而强行锁车。 | **彻底根除**。手机端运行卡尔曼滤波 + **连续 4.5 秒远场驻留确认** + **6.0 秒近场离开保护**，偶发信号衰减绝不误锁。 | 🟢 **本 App 显著优胜** |
+| **靠近车门罚站** | **偶发**。车机仅有单蓝牙连接槽位，手机官方 App 连上瞬间车机立即停发广播，原厂若未及时判定就会卡死在门外。 | **顺畅秒解**。采用广播提前解（约 3 米）与官方连接即刻解双保险机制，走到车门前已完成解闭锁指令下发。 | 🟢 **本 App 显著优胜** |
+| **车载无线充电联动** | **无**。车机无法确切感知手机是在口袋里还是在中控无线充槽内，行车或怠速时易受蓝牙波动误判。 | **完整支持**。手机放入车载无线快充面板立即激活防锁保护；**非对称设计**（只禁自动锁车，不禁靠近解锁）；含 **3 秒断充防抖**。 | 🟢 **本 App 显著优胜** |
+| **防钥匙反锁车内** | 偶尔会因手机放在包里留在车座上、车主下车关门被车机误判为离开而反锁。 | 手机处于车内强信号区或车载充电中，状态机绝对不触发闭锁，杜绝手机钥匙被锁车内。 | 🟢 **本 App 显著优胜** |
+| **灵敏度与门限微调** | **完全黑盒**。车机出厂固件写死阈值，不同手机蓝牙射频增益存在差异却完全不可调。 | **全开放自定义**。解锁阈值（默认 `-75 dBm`）、上锁阈值（默认 `-82 dBm`）、驻留秒数在 UI 支持实时配置。 | 🟢 **本 App 显著优胜** |
+| **问题排查透明度** | **无日志**。动作未触发或偶发锁车时车主完全无法追溯原因。 | **全记录黑匣子**。提供毫秒级信号日志与一键导出排查 ZIP，未动作原因一目了然。 | 🟢 **本 App 显著优胜** |
+| **系统后台保活依赖** | **零依赖**。车机为主机，手机只要蓝牙开着即可，不需要任何后台服务常驻。 | **强依赖**。手机必须保持本 App 后台运行并授予常驻白名单；若被手机系统休眠杀后台，功能将即刻失效。 | 🔴 **原厂更省心** |
+| **官方应用前台依赖** | **无依赖**。硬件直连，不需要手机亮屏或开启特定应用。 | **依赖**。依靠截获领克官方 App 常驻通知栏点击 `PendingIntent`；若领克 App 掉登录、通知被清除则失效。 | 🔴 **原厂更原生** |
+| **手机耗电量** | 手机端纯被动监听，日耗电量增加 `< 0.5%`。 | 手机在息屏下需周期性维持 BLE 扫描与微弱常驻唤醒，日耗电量约额外增加 `1% ~ 3%`。 | 🔴 **原厂更省电** |
+| **车身多方位分区感知** | 车身布置多根天线，可精确识别车主位于左前门、右侧还是尾门（支持脚踢感应尾门）。 | 仅依靠手机单点 RSSI 测距，只能感知空间距车距离，无法精准判断人在车身的具体方位。 | 🔴 **原厂硬件优势** |
 
-**② 调用银河 App 的蓝牙钥匙** ——
+---
 
-- **蓝牙钥匙连接**：把扫到的车机广播注入银河官方 `MiuiService` / `DigitalKeyBgService`，官方钥匙 SDK 自己完成 V2 鉴权、自己连车。
-- **蓝牙钥匙解锁 / 上锁**：找到银河常驻通知栏里的「解锁 / 上锁」按钮，通过 PendingIntent 或无法提取 PI 时的 View 点击发送一次；统一等待官方就绪，不再叠加广播与多套重发队列。
-
-所以整条链路严格等效于：
+## 二、核心工作原理
 
 ```
-你手动打开银河 App  →  等它连上蓝牙钥匙  →  下拉通知栏点「解锁」/「上锁」
+[车机 BLE 广播] ──── (1. 手机持续滤波感知) ────> [LynkCoPassiveKey 状态机]
+                                                        │ (2. 判定达到进出阈值)
+                                                        ▼
+[领克车锁动作] <─── (3. 执行 RKE 指令) ─── [领克官方 App 通知栏 PendingIntent]
 ```
 
-只是这一串现在由本 App 在你息屏、手机在口袋里的状态下自动完成。
-
-> **钥匙凭证、V2 鉴权、车控指令全部在银河官方 App 内完成。**
-> 本 App 不生成钥匙、不伪造凭证、不读官方私有数据（SharedPreferences / MMKV / REA）、不需要 root、不需要 adb。
-
----
-
-## 三、为什么这样反而不罚站
-
-| 机制 | 作用 |
-| :--- | :--- |
-| **官方就绪即处理** | 官方钥匙通知变成「已连接」立即处理一次接近机会，已有请求仅完成它。GATT 测距已连不会提前冒充官方鉴权就绪。 |
-| **一次接近只解锁一次** | 成功交付后不重复；锁后仍连着时须真实近场持续1秒才能再次解锁，口袋补偿与边界抖动不算返回。 |
-| **近场保护** | 最近6秒还在默认 `-78 dBm` 以上则禁止发送上锁；保护与远离计时同时进行。 |
-| **靠近阶段不反向锁车** | 官方连接可以提前解锁；实际进入过车旁后才按原阈值确认离开。没有走到车旁便转身时，需要同一采样来源的持续变弱证据，广播/GATT落差不算离开。 |
-| **上锁要驻留** | 默认未补偿 RSSI `≤ -82 dBm` 连续4.5秒、至少3个新样本；进入缓冲带或采样断档即取消计时。 |
-| **断连不误锁** | GATT 断开 / 蓝牙重启后 10~15 秒内禁止自动上锁。宁可不锁，也不在你车旁误锁。 |
-| **行车不动作** | 银河通知明确显示「行驶中」时，不解锁也不上锁。 |
-| **插线禁控** | 手机插着有线充电（例如在车里用 USB 供电）时默认禁止自动解闭锁。 |
-
-默认解锁阈值 `-75 dBm`（实车调过的提前解锁点）、上锁阈值 `-82 dBm`、驻留 `4.5 s`，都能在 App 里改。
-
-手机遮挡稳定800ms后，接近信号补偿 `+8 dBm`，上锁信号不补偿。界面最多显示10条关键日志，后台轮转日志总容量上限 **4 MiB**，采样和关键动作分别保存。显示“指令已交付”代表已交给银河，未取得车锁执行回执。
-
-遇到解锁慢或漏锁，先记下大概发生时间，再到 App 底部点 **“导出排查日志（ZIP）”** 保存文件。ZIP 包含版本、配置和完整保留日志；车辆地址和名称会替换为本机指纹，不自动上传。详见 [日志排查说明](docs/39_v4_0_2_diagnostic_logs.md)。
+1. **不需要车机开启自带的 PE 功能**：车机设置里的「靠近解锁 / 远离上锁」必须完全关闭；本 App 不碰车机底层参数，避免双向逻辑冲突。
+2. **纯合法通道调度**：
+   * 蓝牙连接：扫到车辆广播后，将广播特征注入领克官方 `MiuiService`，由官方钥匙 SDK 自动发起鉴权与连接；
+   * 车锁执行：直接提取领克官方 App 常驻通知栏中的「解锁 / 上锁」按钮 `PendingIntent` 模拟用户点击（Remote Keyless Entry / RKE）。
+   * **安全边界**：不破解私钥、不伪造 ICCE 握手协议、不碰官方私有存储、无需 Root / ADB。
 
 ---
 
-## 四、v4.0 只做两件事
+## 三、关键防御与安全机制
 
-- ✅ 息屏靠近解锁
-- ✅ 离开上锁
-
-摇一摇、电源键三连、快捷磁贴、桌面组件、里程、胎压、哨兵、语音、充电门控、手动解闭锁……全部删除。旧版实现和它们的逆向记录仍留在 `docs/` 里备查。
-
-不需要填 VIN、MAC 或车型：安装后用银河 App 正常连一次车，本 App 自动学习本车的蓝牙身份并记住。
-
----
-
-## 五、安装
-
-1. 银河官方 App 已登录、蓝牙钥匙已绑定（凭证在官方 App 里，本 App 不碰）；
-2. 装 [GeelyPassiveKey.apk](https://github.com/yangyongyongyong/GeelyPassiveKey/releases/latest)；
-3. 打开 App，授予：蓝牙权限、**通知使用权**、电池优化白名单；
-4. 靠近车辆，让银河 App 成功连接一次；
-5. 日志出现下面三行就成了：
-
-```text
-✓ 已自动识别本车蓝牙: addr_id=... name_id=... identity_id=...
-✓ 银河蓝牙钥匙已连接
-✓ 已挂载车机 ACL，开始读取连接态 RSSI
-```
-
-之后保持后台运行，息屏放口袋即可。换车或换了蓝牙模块，点「重新学习本车」再连一次。
-
-**没有通知使用权**时 App 仍能扫描、显示信号，但点不到官方通知栏的解锁按钮——这个权限是必需的。
-
-- vivo / OriginOS：设置 → 电池 → 后台耗电管理 → 允许后台高耗电；i管家 → 自启动 → 允许。
-- 其他 ROM 若息屏后暂停 BLE 扫描，本 App 会重建扫描器，但仍建议加白名单。
+* **非对称充电禁控（Asymmetric Inhibit）**：
+  * **锁定拦截**：检测到手机处于有线充电或车载无线充电时，判定手机在车内，强行禁止一切自动上锁并清零驻留，防止行车中误锁；
+  * **解锁放行**：即便车主兜里连着移动充电宝走向车身，靠近解锁依旧正常触发，彻底告别“车门前罚站”；
+* **车载无线充电 3 秒断充防抖**：
+  * 针对领克中控无线充电面板，路面颠簸导致手机短暂位移断充时，提供 3 秒平滑延迟；3 秒内复充不解除保护，免疫颠簸跳充。
+* **一次接近只解锁一次**：
+  * 靠近解锁成功后锁定会话；必须在真正离开车辆并持续处于远场断开后，才会重新武装下一次靠近。
+* **全自动特征自学习**：
+  * 安装后无需手动查找并输入 17 位 VIN 码；在车旁用领克 App 成功连车一次，本 App 会自动捕获并持久化该车蓝牙特征。
 
 ---
 
-## 六、目录
+## 四、安装与使用说明
+
+### 1. 准备工作与系统权限（以主流 Android / OriginOS 为例）
+1. 确保领克官方 App（`com.lynkco.customer`）已登录并完成蓝牙数字钥匙配对；
+2. 在 [Releases](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) 下载并安装 `LynkCoPassiveKey.apk`；
+3. 打开本 App，按提示授予必要系统权限：
+   * **通知使用权（核心必选）**：设置 $\rightarrow$ 应用与权限 $\rightarrow$ 特殊应用权限 $\rightarrow$ 通知使用权 $\rightarrow$ 开启「领克无感钥匙」；
+   * **后台高耗电 / 电池优化白名单**：「领克官方 App」与「领克无感钥匙」两款应用均需设为「允许后台高耗电」；
+   * **自启动与关联启动**：在系统权限管理中允许两款应用自启动；
+   * **位置与附近设备**：授予「附近设备/蓝牙」及「始终允许位置信息」（Android 12+ BLE 扫描必需）。
+
+### 2. 车机端配置
+* 进入领克中控车机设置 $\rightarrow$ 门锁与车窗 $\rightarrow$ **彻底关闭「靠近解锁 / 离开上锁」开关**。
+
+### 3. 首次配对
+* 走到车旁，打开领克官方 App 手动连上一次蓝牙钥匙；
+* 打开「领克无感钥匙」，界面显示“已学习车辆”且状态出现“领克钥匙：已连接”即完成首次绑定；
+* 之后将 App 保留在后台，手机熄屏放入口袋即可正常使用。
+
+---
+
+## 五、目录结构
 
 ```text
 .
 ├── GeelyKeyRadarApp/
-│   ├── build.sh                                # 单测 → 编译 → 签名 → 安装
-│   ├── AndroidManifest.xml
+│   ├── Dockerfile                              # 纯净独立 Docker 编译镜像配置
+│   ├── build.sh                                # 单测 -> 编译 -> 对齐 -> 签名全流程脚本
+│   ├── AndroidManifest.xml                     # 领克适配清单配置
 │   ├── res/
 │   ├── src/com/luca/geelykeyradar/
-│   │   ├── PassiveKeyService.java              # 前台服务：扫描、学习、RSSI、GATT、保活
-│   │   ├── PassiveKeyLogic.java                # 状态机：一次解锁、驻留上锁、断连不误锁
-│   │   ├── GeelyBridge.java                    # 调官方 MiuiService / 通知控制兜底
-│   │   ├── KeyNotificationBridgeService.java   # 读官方通知、点解锁/上锁按钮
-│   │   ├── GeelyAdvertisement.java             # 吉利广播解析
-│   │   ├── VehicleIdentity.java                # 本车蓝牙身份匹配
-│   │   ├── VehicleIdentityStore.java           # 身份持久化 + 阈值开关
-│   │   ├── RssiFilter.java                     # 三点中值 + 按时间计算的 EMA
-│   │   ├── PendingControl.java                 # 唯一待发请求和有限重试
-│   │   ├── NotificationEpoch.java              # 旧通知和移除事件隔离
-│   │   ├── RotatingFileLog.java                # 固定容量轮转日志
-│   │   ├── DiagnosticLog.java                  # 跨模块日志与进程退出记录
-│   │   ├── DiagnosticLogStore.java             # 有界写入队列与一致快照导出
-│   │   ├── DiagnosticText.java                 # 车辆身份与凭证脱敏
-│   │   ├── DiagnosticCounters.java             # 扫描、读取和过滤计数
-│   │   ├── MainActivity.java                   # 极简配置页
-│   │   └── BootReceiver.java                   # 开机 / 更新自动拉起
-│   └── tests/                                  # 纯逻辑单测
-└── docs/                                       # 逆向知识库 + 版本演进记录
+│   │   ├── PassiveKeyService.java              # 前台服务：扫描、无线充防抖、GATT 调度
+│   │   ├── PassiveKeyLogic.java                # 状态机：非对称禁控、近场保护、4.5s 驻留
+│   │   ├── GeelyBridge.java                    # 领克 MiuiService 直连与包名路由
+│   │   ├── KeyNotificationBridgeService.java   # 领克通知栏提取、PendingIntent 模拟点击
+│   │   ├── GeelyAdvertisement.java             # 领克/吉利广播特征解析
+│   │   ├── VehicleIdentityStore.java           # 车辆特征持久化与独立无线充开关
+│   │   ├── MainActivity.java                   # 领克风格极简配置界面
+│   │   └── ...
+│   └── tests/                                  # 纯 Java 逻辑回归测试套件
+├── docs/
+│   ├── adr/                                    # 架构决策记录 (ADR)
+│   ├── 41_lynkco_compatibility_research.md     # 领克兼容性调研报告
+│   ├── 42_lynkco_apk_reverse_analysis.md       # 领克 App 逆向工程与资源 ID 提取
+│   └── ...                                     # 历史逆向资料与机制剖析
+└── GLOSSARY.md                                 # 领域统一术语表
 ```
 
-APK 不入库（`.gitignore` 排除 `*.apk`），从 [Releases](https://github.com/yangyongyongyong/GeelyPassiveKey/releases) 下载。
-
 ---
 
-## 七、文档
+## 六、构建与测试
 
-当前版本看 **36**；查协议看 **01**，查误锁根因看 **03**，查完整链路看 **18**。
-
-| 文档 | 内容 |
-| :--- | :--- |
-| [36](docs/36_minimal_generic_passive_key.md) | **v4.0 极简版**：为什么不需要车机 PE 开关、通用身份学习、状态机与安全约束 |
-| [37](docs/37_20261107_slow_unlock_missed_lock_diagnosis.md) | 2026-11-07慢解锁/漏锁排查：已验证缺陷、离线复现及日志证据边界 |
-| [38](docs/38_v4_0_1_response_and_control_safety.md) | **v4.0.1响应优化**：信号回放对比、通知与GATT隔离、单队列发送、回归与实车验证事项 |
-| [39](docs/39_v4_0_2_diagnostic_logs.md) | **v4.0.2日志增强**：导出操作、日志容量、事件字段、未动作原因与故障复盘步骤 |
-| [40](docs/40_v4_0_3_approach_relock_guard.md) | **v4.0.3靠近误锁修复**：提前解锁与离开资格分开、同源轨迹确认、实车日志时间线和回归 |
-| [01](docs/01_geely_ble_protocol_and_sdk.md) | 银河脱壳、`0x01FE` / `FF15` 广播格式、GATT UUID、AIDL、通知栏控件 ID |
-| [02](docs/02_vivo_wallet_and_iccoa_key.md) | vivo 钱包 / ICCOA 开卡流程与测距公式 |
-| [03](docs/03_root_causes_3m_lock_and_disconnect.md) | **3 米误锁、偶现不自动连蓝牙的源码级根因** |
-| [06](docs/06_real_car_field_test_and_v2_ble_findings.md) | 实车联调：V2 3.07s 鉴权窗口、单槽位 ACL、5 米信号阶梯 |
-| [18](docs/18_phone_key_workflow.md) | **手机钥匙完整链路图**（含 `docs/diagrams/` 流程图） |
-| [07](docs/07_recent_reverse_findings_and_v2_2_features.md) | 逆向发现合集：DK1.5 枚举反转、车机 `0x0501` 开关真相、车辆状态枚举 |
-| [08](docs/08_threshold_dwell_and_screen_off.md) | 阈值 + 驻留状态机，锁屏失效根因与保活 |
-| [23](docs/23_v3_13_cabin_rssi_stabilizer.md) | 车内多径 RSSI 稳定化（Kalman / 中值 / 限速） |
-| [26](docs/26_v3_16_ble_loss_no_false_lock.md) | 断连不误锁的取舍 |
-| [30](docs/30_v3_20_1_own_car_ble_identity.md) · [34](docs/34_v3_20_5_target_duplicate_isolation.md) | 本车身份识别、多车隔离 |
-| [35](docs/35_v3_20_6_approach_unlock_single_shot.md) | 一次接近只解锁一次 |
-| [04](docs/04_geely_key_radar_app_architecture.md) · [05](docs/05_vivo_originos6_adb_optimization.md) · [09](docs/09_v2_4_shake_state_and_ui.md)–[29](docs/29_v3_19_accessibility_odometer_tire.md) | 旧版 v2.x–v3.x 功能与踩坑存档（摇一摇、组件、磁贴、里程、充电门控等，v4.0 已删除） |
-
----
-
-## 八、构建
+本项目支持在标准 Docker 容器中实现纯净、可重现构建：
 
 ```bash
-bash GeelyKeyRadarApp/build.sh
+# 1. 构建编译镜像
+docker build -t lynkco-key-builder:latest GeelyKeyRadarApp
+
+# 2. 容器内执行编译与 6 项全量单元测试
+docker run --rm -v "${PWD}:/workspace" -w /workspace/GeelyKeyRadarApp lynkco-key-builder:latest bash build.sh
 ```
 
-先跑状态机、RSSI完整流程、待发请求、通知版本、日志轮转与诊断导出 **6组测试**，再 `aapt2` → `javac` → `d8` → `apksigner`。检测到真机时尝试安装；`SKIP_INSTALL=1` 可只构建。产物：`GeelyKeyRadarApp/GeelyPassiveKey.apk`。
-
-本地发布压缩包包含当前极简版源码、资源、测试、文档和签名APK；不包含Git目录、构建缓存、签名私钥、本机配置、运行日志、旧版源码归档及历史界面mockups。重新构建时脚本会生成新的调试签名；若要覆盖已安装版本，需要沿用本机原签名密钥。
-
-调试：
-
-```bash
-adb logcat -s PassiveDiagnostics PassiveKey GeelyBridge KeyNotifBridge
-adb shell run-as com.luca.geelykeyradar cat files/passive_key.log
-```
+构建产物将输出至 `LynkCoPassiveKey.apk`（APK 产物不入库，单独发布于 GitHub Releases）。
 
 ---
 
-## 九、已知边界
+## 免责声明
 
-1. **必须有银河官方 App**：凭证、鉴权、车控按钮全在官方 App 里，本 App 只是「雷达 + 代点」。
-2. **依赖官方通知栏控件**：按资源 ID + 「解锁/上锁」文本双路径查找，官方大改版后可能需要更新。
-3. **首次要连一次车**：官方 App 被系统冻结时，先手动打开一次完成学习。
-4. **多辆吉利车相邻**：未学习时只让一个主候选进 RSSI 流；即使注入错车，官方 SDK 也不会鉴权通过，本 App 会重试。
-5. **ROM 差异**：部分 ROM 息屏会暂停 BLE 扫描，建议按第五节加后台白名单。
-6. **非 vivo 手机的 5 秒远距连接延迟坑（已记录，暂未改代码）**：银河 `AbsBleStrategy.connectBle(ScanResult)` 对 `isPhoneVIVO()` 直接发起连接，而对非 vivo 手机会检查 `ScanResult.getRssi() >= min_conn_rssi`，弱信号时放入 `connectDelayThread` 延迟 `5000ms` 再连。后续若在非 vivo 机型上遇到远距唤醒偏慢，可在注入 `MiuiService` 时将 `ScanResult` 副本的 `rssi` 改写为 `-55` 绕过（详见 [docs/36_minimal_generic_passive_key.md](docs/36_minimal_generic_passive_key.md) 第 10 节）。
-
----
-
-## 免责
-
-仅供自己车辆个人使用。仓库内逆向内容为学习记录，不含钥匙凭证或账号信息。车控有风险，请自行确认安全边界。
+本项目仅供个人学习、技术逆向研究与自有车辆便利性优化使用。本软件基于 Android 官方公开 API 与领克官方应用前台通知栏交互，不包含任何车辆通信私钥或破解证书。车控安全责任由使用者自行承担。

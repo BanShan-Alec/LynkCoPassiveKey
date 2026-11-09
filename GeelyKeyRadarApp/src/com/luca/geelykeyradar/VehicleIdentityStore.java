@@ -20,6 +20,7 @@ final class VehicleIdentityStore {
     private static final String KEY_MANUAL_CLEARED = "vehicle_manual_cleared";
     private static final String KEY_SERVICE_ENABLED = "service_enabled";
     private static final String KEY_BLOCK_WHEN_CHARGING = "block_control_when_charging";
+    private static final String KEY_BLOCK_WHEN_WIRELESS_CHARGING = "block_control_when_wireless_charging";
     private static final String KEY_UNLOCK_DBM = "unlock_dbm";
     private static final String KEY_LOCK_DBM = "lock_dbm";
     private static final String KEY_LOCK_DWELL_MS = "lock_dwell_ms";
@@ -141,6 +142,14 @@ final class VehicleIdentityStore {
 
     void setBlockWhenChargingEnabled(boolean enabled) {
         prefs.edit().putBoolean(KEY_BLOCK_WHEN_CHARGING, enabled).apply();
+    }
+
+    boolean isBlockWhenWirelessChargingEnabled() {
+        return prefs.getBoolean(KEY_BLOCK_WHEN_WIRELESS_CHARGING, true);
+    }
+
+    void setBlockWhenWirelessChargingEnabled(boolean enabled) {
+        prefs.edit().putBoolean(KEY_BLOCK_WHEN_WIRELESS_CHARGING, enabled).apply();
     }
 
     float getUnlockDbm() {

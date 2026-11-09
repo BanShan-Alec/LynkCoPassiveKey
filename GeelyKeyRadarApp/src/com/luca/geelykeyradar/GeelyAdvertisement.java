@@ -169,8 +169,8 @@ final class GeelyAdvertisement {
      */
     String carId() {
         if (!name.isEmpty()) return name;
-        if (!vinTail2.isEmpty()) return "geely-vin-" + vinTail2;
-        return "geely-ble";
+        if (!vinTail2.isEmpty()) return "lynkco-vin-" + vinTail2;
+        return "lynkco-ble";
     }
 
     String stableKey() {
@@ -179,7 +179,7 @@ final class GeelyAdvertisement {
 
     String displayName() {
         if (!name.isEmpty()) return name;
-        if (!vinTail2.isEmpty()) return "GeelyVehicle??" + vinTail2;
+        if (!vinTail2.isEmpty()) return "LynkCo??" + vinTail2;
         return address;
     }
 
@@ -194,12 +194,23 @@ final class GeelyAdvertisement {
     static boolean isGeelyVehicleName(String value) {
         if (value == null) return false;
         String n = value.trim();
-        return n.regionMatches(true, 0, "GeelyVehicle", 0, "GeelyVehicle".length());
+        return n.regionMatches(true, 0, "GeelyVehicle", 0, "GeelyVehicle".length())
+                || n.regionMatches(true, 0, "LynkCo", 0, "LynkCo".length())
+                || n.regionMatches(true, 0, "Lynk", 0, "Lynk".length());
     }
 
     static String vinTailFromName(String value) {
         if (!isGeelyVehicleName(value)) return "";
-        String suffix = value.trim().substring("GeelyVehicle".length());
+        String trimmed = value.trim();
+        int prefixLen = 0;
+        if (trimmed.regionMatches(true, 0, "GeelyVehicle", 0, "GeelyVehicle".length())) {
+            prefixLen = "GeelyVehicle".length();
+        } else if (trimmed.regionMatches(true, 0, "LynkCo", 0, "LynkCo".length())) {
+            prefixLen = "LynkCo".length();
+        } else if (trimmed.regionMatches(true, 0, "Lynk", 0, "Lynk".length())) {
+            prefixLen = "Lynk".length();
+        }
+        String suffix = (prefixLen > 0 && prefixLen <= trimmed.length()) ? trimmed.substring(prefixLen) : trimmed;
         int end = suffix.length();
         while (end > 0 && Character.isDigit(suffix.charAt(end - 1))) {
             end--;

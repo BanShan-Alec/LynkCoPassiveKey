@@ -48,16 +48,16 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
     }
 
     private static final String TAG = "KeyNotifBridge";
-    public static final String GEELY_PKG = "com.geelygalaxy.customer";
+    public static final String GEELY_PKG = "com.lynkco.customer";
     public static final int GEELY_DK_NOTIFY_ID = 5;
 
     // Resource IDs from com.geely.snc.digitalkey.base.R$id (verified via dexdump of DkRemoteView.buildRemoteView @ 0x5011e8)
-    public static final int ID_NOTIF_LAYOUT_LOCK_UNLOCK = 0x7f0a10c6;
-    public static final int ID_NOTIF_TV_LOCK            = 0x7f0a10c7;
-    public static final int ID_NOTIF_TV_STATUS_CONN     = 0x7f0a10c8;
-    public static final int ID_NOTIF_TV_STATUS_DISCONN  = 0x7f0a10c9;
-    public static final int ID_NOTIF_TV_STATUS_NO       = 0x7f0a10ca;
-    public static final int ID_NOTIF_TV_UNLOCK          = 0x7f0a10cb;
+    public static final int ID_NOTIF_LAYOUT_LOCK_UNLOCK = 0x7f0a1694;
+    public static final int ID_NOTIF_TV_LOCK            = 0x7f0a1695;
+    public static final int ID_NOTIF_TV_STATUS_CONN     = 0x7f0a1696;
+    public static final int ID_NOTIF_TV_STATUS_DISCONN  = 0x7f0a1697;
+    public static final int ID_NOTIF_TV_STATUS_NO       = 0x7f0a1698;
+    public static final int ID_NOTIF_TV_UNLOCK          = 0x7f0a1699;
 
     private static volatile KeyNotificationBridgeService instance;
     private static volatile boolean geelyBleConnected = false;
@@ -228,7 +228,8 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
     }
 
     /**
-     * 检查当前是否因插着 USB/AC 有线充电线（或关闭了服务总开关）而禁止操作车锁。
+     * 检查当前是否因充电（或关闭了服务总开关）而禁止操作车锁。
+     * 非对称设计：解锁操作永不因充电而被拦截；上锁操作在充电时被拦截。
      */
     private static boolean isControlBlocked(boolean unlock) {
         KeyNotificationBridgeService svc = instance;
@@ -242,13 +243,21 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
             }
             if ("行驶中".equals(lastObservedParkStatus)
                     && SystemClock.elapsedRealtime() - lastObservedParkStatusAtMs < 90000L) return true;
-            if (!store.isBlockWhenChargingEnabled()) {
+            // 非对称禁控：解锁操作不拦截充电状态（防止随身带充电宝走向车门时罚站）
+            if (unlock) {
+                return false;
+            }
+            boolean blockWired = store.isBlockWhenChargingEnabled();
+            boolean blockWireless = store.isBlockWhenWirelessChargingEnabled();
+            if (!blockWired && !blockWireless) {
                 return false;
             }
             Intent sticky = svc.registerReceiver(null, new IntentFilter(Intent.ACTION_BATTERY_CHANGED));
-            if (sticky == null) return true;
+            if (sticky == null) return false;
             int plugged = sticky.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0);
-            return (plugged & (BatteryManager.BATTERY_PLUGGED_AC | BatteryManager.BATTERY_PLUGGED_USB)) != 0;
+            boolean wired = (plugged & (BatteryManager.BATTERY_PLUGGED_AC | BatteryManager.BATTERY_PLUGGED_USB)) != 0;
+            boolean wireless = (plugged & BatteryManager.BATTERY_PLUGGED_WIRELESS) != 0;
+            return (blockWired && wired) || (blockWireless && wireless);
         } catch (Throwable ignored) {
             return true;
         }
@@ -284,7 +293,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
                 } else {
                     pi.send();
                 }
-                Log.i(TAG, "✓ 已通过通知栏 PendingIntent.send() 触发银河【" + actionLabel + "】按钮");
+                Log.i(TAG, "✓ 已通过通知栏 PendingIntent.send() 触发领克【" + actionLabel + "】按钮");
                 return controlResult(ControlResult.SENT, "PI", actionLabel, null);
             } catch (PendingIntent.CanceledException cancelled) {
                 Log.w(TAG, "通知 PendingIntent 已失效，等待新按钮: " + actionLabel);
@@ -300,7 +309,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
             if (Looper.myLooper() == Looper.getMainLooper()) {
                 try {
                     boolean clicked = buttonView.performClick();
-                    Log.i(TAG, "✓ 已在主线程调用通知栏按钮 View.performClick() 触发银河【" + actionLabel + "】 -> " + clicked);
+                    Log.i(TAG, "✓ 已在主线程调用通知栏按钮 View.performClick() 触发领克【" + actionLabel + "】 -> " + clicked);
                     return controlResult(clicked ? ControlResult.SENT : ControlResult.NOT_SENT, "VIEW", actionLabel, null);
                 } catch (Throwable uncertain) {
                     Log.w(TAG, "通知按钮执行结果未知，停止自动重试", uncertain);
@@ -391,11 +400,18 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
         }
     }
 
+    static boolean isOfficialKeyNotification(StatusBarNotification sbn) {
+        if (sbn == null || !GEELY_PKG.equals(sbn.getPackageName())) return false;
+        if (sbn.getId() == GEELY_DK_NOTIFY_ID) return true;
+        Notification notif = sbn.getNotification();
+        return notif != null && (notif.contentView != null || notif.bigContentView != null);
+    }
+
     /** 只解析官方钥匙通知，普通业务通知不触发车控或重新拉起主服务。 */
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         if (instance != this || !listenerConnected) return;
-        if (sbn != null && GEELY_PKG.equals(sbn.getPackageName()) && sbn.getId() == GEELY_DK_NOTIFY_ID) {
+        if (isOfficialKeyNotification(sbn)) {
             diagnosticCounters.increment("notification_posted");
             lastPostedAtMs = SystemClock.elapsedRealtime();
             lastSeenAtMs = lastPostedAtMs;
@@ -425,7 +441,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
     @Override
     public void onNotificationRemoved(StatusBarNotification sbn) {
         if (instance != this || !listenerConnected) return;
-        if (sbn != null && GEELY_PKG.equals(sbn.getPackageName()) && sbn.getId() == GEELY_DK_NOTIFY_ID) {
+        if (isOfficialKeyNotification(sbn)) {
             diagnosticCounters.increment("notification_removed");
             long token = notificationEpoch.remove(sbn.getKey(), sbn.getPostTime());
             if (token < 0L) {
@@ -456,7 +472,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
             if (active == null) return;
             boolean found = false;
             for (StatusBarNotification sbn : active) {
-                if (sbn != null && GEELY_PKG.equals(sbn.getPackageName()) && sbn.getId() == GEELY_DK_NOTIFY_ID) {
+                if (isOfficialKeyNotification(sbn)) {
                     found = true;
                     lastSeenAtMs = SystemClock.elapsedRealtime();
                     parseGeelyNotification(sbn);
@@ -522,7 +538,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
         if (isGroupSummary && notif.contentView == null && notif.bigContentView == null) {
             return;
         }
-        if (sbn.getId() != GEELY_DK_NOTIFY_ID && notif.contentView == null && notif.bigContentView == null) {
+        if (!isOfficialKeyNotification(sbn) && notif.contentView == null && notif.bigContentView == null) {
             return;
         }
 
@@ -731,7 +747,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
                     + " " + diagnosticSnapshot(lastParsedAtMs));
         }
         if (!lastButtonCaptureDiag.equals(previousDiag) || prevConnected != geelyBleConnected) {
-            Log.i(TAG, "已解析银河通知栏: " + lastButtonCaptureDiag
+            Log.i(TAG, "已解析领克通知栏: " + lastButtonCaptureDiag
                     + " (本次捕获: unlock=" + foundUnlockBtn + ", lock=" + foundLockBtn + ")");
             // 通知就绪立即唤醒唯一队列，不在通知服务中自行点击。
             notifyStateListener();

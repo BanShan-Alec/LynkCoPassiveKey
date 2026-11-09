@@ -9,7 +9,7 @@ import java.util.regex.Pattern;
 /** 日志写入和导出共用的脱敏规则，不保留车辆完整地址、名称尾号或凭证内容。 */
 final class DiagnosticText {
     private static final Pattern MAC = Pattern.compile("(?i)(?<![0-9a-f])(?:[0-9a-f]{2}:){5}[0-9a-f]{2}(?![0-9a-f])");
-    private static final Pattern VEHICLE = Pattern.compile("(?i)GeelyVehicle[0-9a-z?]+|geely-vin-[0-9a-z]+|VIN尾号\\s*[0-9a-z]+|(?<![0-9a-z])[A-HJ-NPR-Z0-9]{17}(?![0-9a-z])");
+    private static final Pattern VEHICLE = Pattern.compile("(?i)GeelyVehicle[0-9a-z?]+|geely-vin-[0-9a-z]+|LynkCo[0-9a-z?]+|lynkco-vin-[0-9a-z]+|VIN尾号\\s*[0-9a-z]+|(?<![0-9a-z])[A-HJ-NPR-Z0-9]{17}(?![0-9a-z])");
     private static final Pattern SECRET = Pattern.compile("(?i)((?:access_token|refresh_token|authorization|password|secret|credential|token)\\s*[=:]\\s*)(?:Bearer\\s+)?[^\\s,|]+");
     private static final Pattern LEGACY_IDENTITY = Pattern.compile(
             "((?:已加载本车身份|已绑定本车特征|已更新本车蓝牙特征|扫到本车特征广播，已自动锁定"

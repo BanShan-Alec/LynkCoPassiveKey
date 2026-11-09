@@ -73,6 +73,22 @@ final class PassiveKeyLogic {
     private long earlyUnlockSentAtMs = 0L;
     private float earlyApproachPeakDbm = Float.NaN;
     private String measurementSource = "";
+    private boolean chargingLockBlocked = false;
+
+    /**
+     * 充电禁控保护：充电中禁止上锁（非对称设计，不影响靠近解锁）。
+     */
+    synchronized void setChargingLockBlocked(boolean blocked) {
+        this.chargingLockBlocked = blocked;
+        if (blocked) {
+            resetLockDwell();
+            farSinceMs = 0L;
+        }
+    }
+
+    synchronized boolean isChargingLockBlocked() {
+        return chargingLockBlocked;
+    }
 
     /**
      * 动态更新自定义阈值（靠近解锁阈值、离开上锁阈值、离开确认毫秒数）。
@@ -219,7 +235,7 @@ final class PassiveKeyLogic {
                 return sampleDecision(Action.NONE, "NO_NEAR_EVIDENCE", nowMs);
             }
 
-            if (driving) {
+            if (driving || chargingLockBlocked) {
                 resetLockDwell();
                 farSinceMs = 0L;
                 return sampleDecision(Action.NONE, "DRIVING_OR_WIRED_BLOCK", nowMs);
@@ -450,6 +466,7 @@ final class PassiveKeyLogic {
             return autoUnlock && !(lastSampleAtMs > 0L && (nowMs - lastSampleAtMs) <= SIGNAL_STALE_MS
                     && lastDistanceDbm <= lockDbm);
         }
+        if (chargingLockBlocked) return false;
         return autoLock && hasBeenNear && hasConfirmedDeparture() && nowMs >= lockInhibitUntilMs
                 && lastSampleAtMs > 0L && (nowMs - lastSampleAtMs) <= SIGNAL_STALE_MS
                 && lastDistanceDbm <= lockDbm && lockDwellSamples >= LOCK_MIN_SAMPLES
