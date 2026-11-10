@@ -1290,9 +1290,10 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         PassiveKeyLogic.Action action = pendingControl.getAction();
         long now = SystemClock.elapsedRealtime();
         String request = pendingControl.diagnosticSnapshot(now);
+        boolean actuallyAttempted = pendingControl.getAttempts() > 0;
         pendingControl.cancel();
         if (action == PassiveKeyLogic.Action.NONE) return;
-        logic.onControlFailed(action, SystemClock.elapsedRealtime());
+        logic.onControlFailed(action, now, actuallyAttempted);
         String label = action == PassiveKeyLogic.Action.UNLOCK ? "解锁" : "上锁";
         lastAction = label + "未发送：" + reason;
         DiagnosticLog.event("Control", "REQUEST_CANCELLED", request + " reason=" + reason
