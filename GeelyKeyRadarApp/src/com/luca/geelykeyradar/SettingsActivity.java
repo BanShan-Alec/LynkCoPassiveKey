@@ -253,8 +253,10 @@ public class SettingsActivity extends Activity {
         permissionStatusView = text("", 14, PaseoTheme.COLOR_TEXT, Typeface.NORMAL);
         keepAliveCard.addView(permissionStatusView, bodyLp());
 
-        // 核心自愈按钮：暖金色高对比呈现
-        repairNotificationButton = button("⚡ 一键修复钥匙通道 (服务自愈)", PaseoTheme.COLOR_WARNING, PaseoTheme.COLOR_IDENTITY_INK);
+        // 核心自愈按钮：Primary 主题绿色呈现，配以原生矢量刷新图标
+        repairNotificationButton = button("一键修复钥匙通道", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
+        repairNotificationButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_refresh, 0, 0, 0);
+        repairNotificationButton.setCompoundDrawablePadding(dp(8));
         repairNotificationButton.setOnClickListener(v -> {
             KeyNotificationBridgeService.ensureRebound(SettingsActivity.this);
             Toast.makeText(SettingsActivity.this, "已触发钥匙通道自愈重连，请等待 1-3 秒...", Toast.LENGTH_SHORT).show();

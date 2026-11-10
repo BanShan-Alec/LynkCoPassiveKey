@@ -17,7 +17,7 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * 对吉利银河官方 App 的最小桥接。
+ * 对领克官方 App 的最小桥接。
  *
  * 只使用官方 App 已经导出的组件：
  * - MiuiService / MiuiReceiver：把本应用扫到的 ScanResult 交给官方钥匙 SDK；
@@ -50,7 +50,7 @@ final class GeelyBridge {
     static final int CTRL_LOCK = 2;
 
     /**
-     * 将逻辑控制类型转换为吉利银河 DK 1.5 (DkControlType15 / DkCmdType15) 的真实广播命令值：
+     * 将逻辑控制类型转换为领克/吉利 DK 1.5 (DkControlType15 / DkCmdType15) 的真实广播命令值：
      * 在 DkRemoteView.buildRemoteView 中：
      * - DkControlType15.Lock   = CMD_CLOSE_DOOR15 = 1 (上锁)
      * - DkControlType15.Unlock = CMD_OPEN_DOOR15  = 2 (解锁)
@@ -316,7 +316,7 @@ final class GeelyBridge {
     }
 
     /**
-     * 尝试从系统 GATT 连接列表里找出银河 App 正在连接的车机。
+     * 尝试从系统 GATT 连接列表里找出领克 App 正在连接的车机。
      *
      * 某些 ROM 能返回官方 App 的 GATT 客户端；返回空也不影响广播学习路径。
      */

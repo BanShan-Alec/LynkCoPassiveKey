@@ -173,13 +173,13 @@ public final class PassiveKeyLogicTest {
     /** 官方就绪立即产生请求，发送完成后真正离开才能重新武装。 */
     private static void officialConnectedFiresUnlockAndSilenceRearms() {
         PassiveKeyLogic logic = new PassiveKeyLogic();
-        // 银河抢先连上车机导致广播停止时，onOfficialConnected 应立即触发一次解锁
+        // 领克抢先连上车机导致广播停止时，onOfficialConnected 应立即触发一次解锁
         check(logic.onOfficialConnected(1_000L, false, true) == PassiveKeyLogic.Action.UNLOCK,
-                "银河蓝牙刚连上时应立即触发解锁");
+                "领克蓝牙刚连上时应立即触发解锁");
         logic.onControlSent(PassiveKeyLogic.Action.UNLOCK, 1_000L);
         check(logic.onOfficialConnected(2_000L, false, true) == PassiveKeyLogic.Action.NONE,
                 "同一接近会话不得重复触发");
-        // 用户离开车辆且完全走出蓝牙范围（无新 RSSI 样本），银河断开满 12s 后应自动重新武装
+        // 用户离开车辆且完全走出蓝牙范围（无新 RSSI 样本），领克断开满 12s 后应自动重新武装
         logic.onOfficialDisconnected(5_000L);
         check(!logic.onTick(10_000L, false, false), "未满 12s 不应提前重置");
         check(logic.onTick(18_000L, false, false), "断开且无近场信号满 12s 应自动重新武装");

@@ -9,6 +9,7 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -32,7 +33,7 @@ import java.util.Locale;
  * 遵循 Paseo Dark 设计规范（DESIGN.md）与 Refactoring UI 十二大系统阶梯：
  * 1. 以「走动冷暖雷达 (HotColdRadarView)」为视觉中心，呈现直观的距离色温与门锁态势；
  * 2. 状态微徽章呈现守护状态，右上角提供 46dp 设置靶区直达二级设置页；
- * 3. 常驻唤醒领克钥匙操作，底部仅保留常用动作开关，彻底去除工程噪音。
+ * 3. 常驻打开领克App快捷操作，底部仅保留常用动作开关，彻底去除工程噪音。
  */
 public class MainActivity extends Activity {
 
@@ -222,8 +223,10 @@ public class MainActivity extends Activity {
         radarLp.bottomMargin = dp(PaseoTheme.MARGIN_CARD_BOTTOM);
         root.addView(radarView, radarLp);
 
-        // --- 3. 常驻主操作按钮：唤醒 / 打开领克官方 App ---
-        openOfficialAppButton = button("打开领克官方 App", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
+        // --- 3. 常驻主操作按钮：打开领克App ---
+        openOfficialAppButton = button("打开领克App", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
+        openOfficialAppButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_launch, 0, 0, 0);
+        openOfficialAppButton.setCompoundDrawablePadding(dp(8));
         openOfficialAppButton.setOnClickListener(v -> launchOfficialApp());
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -332,20 +335,27 @@ public class MainActivity extends Activity {
         if (!installed) {
             openOfficialAppButton.setEnabled(false);
             openOfficialAppButton.setText("未安装领克官方 App");
-            openOfficialAppButton.setBackgroundTintList(ColorStateList.valueOf(PaseoTheme.COLOR_SURFACE_4));
+            openOfficialAppButton.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(PaseoTheme.COLOR_SURFACE_4);
+            bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
+            openOfficialAppButton.setBackground(bg);
             openOfficialAppButton.setTextColor(PaseoTheme.COLOR_TEXT_TERTIARY);
             return;
         }
         openOfficialAppButton.setEnabled(true);
-        if (!notificationPresent || !connected) {
-            openOfficialAppButton.setText("⚡ 唤醒领克钥匙 (建立通道)");
-            openOfficialAppButton.setBackgroundTintList(ColorStateList.valueOf(PaseoTheme.COLOR_IDENTITY_ORANGE));
-            openOfficialAppButton.setTextColor(PaseoTheme.COLOR_IDENTITY_INK);
+        openOfficialAppButton.setText("打开领克App");
+        openOfficialAppButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_launch, 0, 0, 0);
+        openOfficialAppButton.setCompoundDrawablePadding(dp(8));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(PaseoTheme.COLOR_PRIMARY);
+        bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            openOfficialAppButton.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22FFFFFF), bg, null));
         } else {
-            openOfficialAppButton.setText("打开领克官方 App");
-            openOfficialAppButton.setBackgroundTintList(ColorStateList.valueOf(PaseoTheme.COLOR_PRIMARY));
-            openOfficialAppButton.setTextColor(PaseoTheme.COLOR_TEXT);
+            openOfficialAppButton.setBackground(bg);
         }
+        openOfficialAppButton.setTextColor(PaseoTheme.COLOR_TEXT);
     }
 
     private void launchOfficialApp() {
@@ -399,12 +409,16 @@ public class MainActivity extends Activity {
         button.setText(label);
         button.setAllCaps(false);
         button.setTextSize(14);
+        button.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         button.setTextColor(textColor);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(bgColor);
         bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
-        button.setBackground(bg);
-        button.setBackgroundTintList(ColorStateList.valueOf(bgColor));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22FFFFFF), bg, null));
+        } else {
+            button.setBackground(bg);
+        }
         return button;
     }
 

@@ -53,7 +53,7 @@ import java.util.concurrent.Future;
  * - 息屏 BLE 扫描 / 连接态 RSSI 读取；
  * - 自动学习本车蓝牙身份；
  * - 靠近一次解锁、持续远离上锁；
- * - 通过银河官方通知栏按钮完成车控。
+ * - 通过领克官方通知栏按钮完成车控。
  *
  * 不包含摇一摇、电源键、快捷磁贴、桌面组件、里程、哨兵、语音、手动解闭锁等功能。
  */
@@ -283,7 +283,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         if (identity != null) {
             appendLog("已加载本车身份: " + identityDiagnostic());
         } else {
-            appendLog("本车身份未学习：先靠近车辆，让银河 App 连接一次，本应用会自动记住");
+            appendLog("本车身份未学习：先靠近车辆，让领克 App 连接一次，本应用会自动记住");
         }
         DiagnosticLog.event("Service", "INITIAL_STATE", getDiagnosticSnapshot());
     }
@@ -634,7 +634,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         lastLearnAttemptAtMs = 0L;
         waitForDisconnectToLearn = geelyConnected;
         lastAction = "已清除本车身份，等待重新学习";
-        appendLog("已清除本车蓝牙身份；请靠近车辆并用银河 App 连接一次");
+        appendLog("已清除本车蓝牙身份；请靠近车辆并用领克 App 连接一次");
         startBleScan();
     }
 
@@ -709,7 +709,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
      * 构建硬件级 BLE ScanFilter 列表（OR 关系）。
      *
      * Android 在息屏时会挂起无 Filter 的扫描（Cannot start unfiltered scan in screen-off）。
-     * 使用吉利/极氪通用广播特征作为硬件过滤，既能对所有吉利银河车型通用，又能保证息屏持续扫描。
+     * 使用领克/吉利通用广播特征作为硬件过滤，既能保证通用，又能保证息屏持续扫描。
      */
     private List<ScanFilter> buildHardwareScanFilters() {
         List<ScanFilter> filters = new ArrayList<>();
@@ -989,7 +989,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
                 + " addr_id=" + DiagnosticLog.fingerprint(ad.address) + " rssi=" + ad.rssi
                 + " req_id=" + pendingControl.getSequence());
         GeelyBridge.wakeAndConnect(this, ad.scanResult, ad.carId());
-        String message = "注入广播唤醒银河 #" + wakeAttempts + " · " + ad.rssi + "dBm";
+        String message = "注入广播唤醒领克 #" + wakeAttempts + " · " + ad.rssi + "dBm";
         if (wakeAttempts == 1) appendLog(message);
         else appendDiagnostic(message);
     }
@@ -1058,7 +1058,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
             return;
         }
 
-        appendLog("银河已连接，但暂未捕获本车广播；下次靠近会自动学习");
+        appendLog("领克已连接，但暂未捕获本车广播；下次靠近会自动学习");
     }
 
     /** 从可见系统连接识别车辆，匿名设备缺少名称时继续查候选广播，不中断就绪处理。 */
@@ -1156,7 +1156,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
                     category,
                     rawDbm,
                     smooth, effective,
-                    geelyConnected ? "银河已连接" : "银河未连接",
+                    geelyConnected ? "领克已连接" : "领克未连接",
                     driving ? " | 行驶中禁锁" : ""));
         }
         long sampleLogInterval = logic.getLockDwellStartMs() > 0L
@@ -1220,7 +1220,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         lastPendingWaitReason = "";
         lastPendingLogAtMs = 0L;
         String label = action == PassiveKeyLogic.Action.UNLOCK ? "解锁" : "上锁";
-        lastAction = label + "等待银河钥匙就绪";
+        lastAction = label + "等待领克钥匙就绪";
         appendLog(String.format(Locale.US,
                 "★ %s请求 #%d · %.1f dBm · %s | %s", label, pendingControl.getSequence(),
                 effectiveDbm, source, signalDiagnostic(now)));
@@ -1241,7 +1241,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
     }
 
     /**
-     * 跨越吉利银河 V2 蓝牙 3.07 秒鉴权窗口的多阶护航重发。
+     * 跨越领克 V2 蓝牙 3.07 秒鉴权窗口的多阶护航重发。
      * 现统一为通知就绪立即尝试和每秒有界重试；不再同时维护通知待发队列与五个延迟任务。
      * 一旦某次成功点中通知栏按钮，立即终止，杜绝二次解闭锁。
      */
@@ -1250,7 +1250,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         if (action == PassiveKeyLogic.Action.NONE) return;
         long now = SystemClock.elapsedRealtime();
         if (pendingControl.isExpired(now)) {
-            cancelPendingControl("等待银河就绪超时，未发送");
+            cancelPendingControl("等待领克就绪超时，未发送");
             return;
         }
         if (!running || !serviceEnabled || (action == PassiveKeyLogic.Action.LOCK && isLockChargingBlocked())
@@ -1293,7 +1293,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         }
         if (action == PassiveKeyLogic.Action.UNLOCK) unlockCount++;
         else lockCount++;
-        lastAction = label + "指令已交给银河（未获取车锁回执）";
+        lastAction = label + "指令已交给领克官方 App（未获取车锁回执）";
         appendLog("✓ " + label + "发送完成 #" + sequence + " 等待="
                 + pendingControl.getAgeMs(now) + "ms | " + signalDiagnostic(now));
         updateNotificationIfNeeded(true);
@@ -1347,20 +1347,20 @@ public class PassiveKeyService extends Service implements SensorEventListener {
             lastGeelyConnectedAtMs = now;
             lastGattAttemptAtMs = 0L;
             wakeAttempts = 0;
-            appendLog("✓ 银河蓝牙钥匙已连接");
+            appendLog("✓ 领克蓝牙钥匙已连接");
             maybeLearnVehicle(now);
             boolean driving = isDriving(now);
             PassiveKeyLogic.Action action = logic.onOfficialConnected(now, driving, autoUnlock && !driving);
             DiagnosticLog.event("Decision", "OFFICIAL_READY_RESULT", "action=" + action
                     + " " + logic.diagnosticSnapshot(now));
             if (action == PassiveKeyLogic.Action.UNLOCK) {
-                handleUnlock(lastRawRssi > -127 ? lastRawRssi : -60.0f, "银河蓝牙连接即刻解锁", currentAd);
+                handleUnlock(lastRawRssi > -127 ? lastRawRssi : -60.0f, "领克蓝牙连接即刻解锁", currentAd);
             }
         } else {
-            appendLog("银河蓝牙钥匙已断开");
+            appendLog("领克蓝牙钥匙已断开");
             waitForDisconnectToLearn = false;
             lastAclConnectedAtMs = 0L;
-            closeGatt("银河蓝牙已断开");
+            closeGatt("领克蓝牙已断开");
             logic.onOfficialDisconnected(now);
         }
         ensureGattAttached(now);
@@ -1408,7 +1408,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         if (lastGattAttemptAtMs > 0L && (now - lastGattAttemptAtMs) < GATT_RETRY_MS) return;
 
         // 严格限制挂载连接态 RSSI 的条件（防止在车外盲目 connectGatt 抢占车机唯一广播槽位）：
-        // 旧版允许仅凭 ACL_CONNECTED 挂载，现在等待银河通知明确就绪，避免干扰 V2 鉴权。
+        // 旧版允许仅凭 ACL_CONNECTED 挂载，现在等待领克通知明确就绪，避免干扰 V2 鉴权。
         if (!geelyConnected) {
             return;
         }
@@ -1770,9 +1770,9 @@ public class PassiveKeyService extends Service implements SensorEventListener {
     /**
      * 处理系统级 BLE GATT 连接状态广播 (android.bluetooth.gatt.profile.action.CONNECTION_STATE_CHANGED)。
      *
-     * 当银河 App 的 :dkservice 连接或断开车机 BLE 时，系统会广播：
+     * 当领克 App 的 :dkservice 连接或断开车机 BLE 时，系统会广播：
      * device_type="ble", bd_addr="<车机当前MAC>", status=<状态>。
-     * 地址轮换后仍须用已学习名称或新鲜广播验证身份；未知设备不能仅凭银河在线就冒充本车。
+     * 地址轮换后仍须用已学习名称或新鲜广播验证身份；未知设备不能仅凭领克在线就冒充本车。
      */
     private void handleGattProfileBroadcast(Intent intent, long now) {
         if (!serviceEnabled) return;
@@ -1785,7 +1785,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
             if (bdAddr.equalsIgnoreCase(lastSelfGattAddress) && (now - lastSelfGattCloseAtMs) < 5000L) {
                 return;
             }
-            // 只在银河通知栏处于已连接状态时，才采信该 BLE GATT 地址为本车新地址
+            // 只在领克通知栏处于已连接状态时，才采信该 BLE GATT 地址为本车新地址
             if (!KeyNotificationBridgeService.isGeelyBleConnected()) {
                 return;
             }
@@ -1969,7 +1969,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
                     && (now - lastGeelyConnectedAtMs) > SIGNAL_EXPIRE_UI_MS
                     && (now - lastRssiWarningAtMs) >= 30000L) {
                 lastRssiWarningAtMs = now;
-                appendLog("银河钥匙已连接，但测距暂无新样本，无法判定远离 | " + signalDiagnostic(now));
+                appendLog("领克钥匙已连接，但测距暂无新样本，无法判定远离 | " + signalDiagnostic(now));
             }
             refreshWakeLock(now);
             runScreenOffScanWatchdog(now);
@@ -2028,9 +2028,9 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         if (!serviceEnabled) {
             text = "无感进出服务已手动关闭";
         } else if (!geelyConnected) {
-            text = identity == null ? "正在学习本车蓝牙身份" : "等待银河蓝牙连接 · " + lastZone;
+            text = identity == null ? "正在学习本车蓝牙身份" : "等待领克蓝牙连接 · " + lastZone;
         } else {
-            text = "银河已连接 · " + lastZone;
+            text = "领克已连接 · " + lastZone;
         }
         try {
             NotificationManager manager = (NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE);

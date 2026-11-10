@@ -120,8 +120,8 @@ final class PassiveKeyLogic {
      *
      * @param effectiveDbm     经过滤波和口袋补偿后的有效信号
      * @param nowMs            当前时间
-     * @param officialConnected 银河 App 的蓝牙钥匙是否已连接
-     * @param driving          银河通知是否明确显示“行驶中”
+     * @param officialConnected 领克 App 的蓝牙钥匙是否已连接
+     * @param driving          领克通知是否明确显示“行驶中”
      * @param autoUnlock       用户是否开启靠近自动解锁
      * @param autoLock         用户是否开启远离自动上锁
      */
@@ -283,8 +283,8 @@ final class PassiveKeyLogic {
                 return sampleDecision(Action.LOCK, "LOCK_DWELL_READY", nowMs);
             }
 
-            // 解锁后银河断开、但上锁命令没有成功送出时，也要允许下一次接近重新解锁。
-            // 正常会话只有“银河已经断开”且持续远场才重新武装；失败预算耗尽则须确认远离再返回。
+            // 解锁后领克断开、但上锁命令没有成功送出时，也要允许下一次接近重新解锁。
+            // 正常会话只有“领克已经断开”且持续远场才重新武装；失败预算耗尽则须确认远离再返回。
             if (hasBeenNear && !officialConnected && pendingAction == Action.NONE) {
                 if ((nowMs - farSinceMs) >= REARM_FAR_MS) {
                     rearm();
@@ -328,14 +328,14 @@ final class PassiveKeyLogic {
     }
 
     /**
-     * 当银河官方蓝牙钥匙刚刚从“未连接”变为“已连接”时调用。
+     * 当领克官方蓝牙钥匙刚刚从“未连接”变为“已连接”时调用。
      *
      * 为什么需要这个入口：
-     * 吉利车机只有 1 个 BLE 连接槽位。一旦银河 App（或 vivo 车联网）抢先连上车机，
+     * 车机只有 1 个 BLE 连接槽位。一旦领克 App 抢先连上车机，
      * 车机立即停止发送 BLE 广播；如果此时本应用还没来得及采到 >= -63dBm 的广播样本，
      * 单靠 RSSI 阈值就会因为“广播突然消失”而漏掉本次靠近解锁（造成车主在车脸前罚站）。
      *
-     * 因此：当银河蓝牙钥匙刚连上（必然发生在车旁蓝牙范围内），且本次接近会话尚未解锁过时，
+     * 因此：当领克蓝牙钥匙刚连上（必然发生在车旁蓝牙范围内），且本次接近会话尚未解锁过时，
      * 直接触发一次解锁并闩锁本次接近会话，后续由连接态 GATT RSSI 负责监测离开自动上锁。
      */
     synchronized Action onOfficialConnected(long nowMs, boolean driving, boolean autoUnlock) {
@@ -383,7 +383,7 @@ final class PassiveKeyLogic {
     }
 
     /**
-     * 银河蓝牙断开时记录断开时刻并清空驻留计时。
+     * 领克蓝牙断开时记录断开时刻并清空驻留计时。
      */
     synchronized void onOfficialDisconnected(long nowMs) {
         if (officialDisconnectedAtMs == 0L) {
@@ -397,7 +397,7 @@ final class PassiveKeyLogic {
     /**
      * 周期性维护状态（每 500ms 调用一次）：
      * 当人离开车辆超出蓝牙距离后，手机往往不再收到任何 BLE 样本（而不是持续收到 -85dBm 样本）。
-     * 若银河已断开且连续 12 秒无近场信号，自动释放 approachLatched，重新武装下一次靠近自动解锁。
+     * 若领克已断开且连续 12 秒无近场信号，自动释放 approachLatched，重新武装下一次靠近自动解锁。
      *
      * @return 若本次调用重新武装了靠近解锁，返回 true
      */
