@@ -37,6 +37,9 @@ public final class PassiveKeyLogicTest {
         switchingRssiSourceDoesNotPretendDeparture();
         sourceSwitchRestartsContinuousFarDwell();
         asymmetricChargingInhibitAllowsUnlockBlocksLock();
+        unattemptedTimeoutDoesNotExhaustUnlockQuota();
+        nearOfficialConnectionTriggersLateArrivalUnlock();
+        actualAttemptFailureConsumesQuota();
         System.out.println("PassiveKeyLogicTest passed");
     }
 
@@ -562,6 +565,75 @@ public final class PassiveKeyLogicTest {
         logic.setChargingLockBlocked(false);
         check(feedUntilLock(logic, 10_500L) >= 15_000L,
                 "断开充电离开后正常触发上锁");
+    }
+
+    /** 纯等待超时未尝试发送的撤销不扣减解锁配额，冷却后允许再次解锁。 */
+    private static void unattemptedTimeoutDoesNotExhaustUnlockQuota() {
+        PassiveKeyLogic logic = new PassiveKeyLogic();
+        check(logic.onSample(-60f, 1_000L, false, false, true, true) == PassiveKeyLogic.Action.UNLOCK,
+                "初次靠近应触发解锁请求");
+        // 第 1 次超时，未实际发送尝试
+        logic.onControlFailed(PassiveKeyLogic.Action.UNLOCK, 13_000L, false);
+
+        // 冷却期后再次采样，应当依然允许触发解锁（配额回滚，未消耗）
+        check(logic.onSample(-60f, 18_100L, false, false, true, true) == PassiveKeyLogic.Action.UNLOCK,
+                "第 1 次未尝试超时后，冷却结束仍应允许触发解锁");
+        // 第 2 次超时，未实际发送尝试
+        logic.onControlFailed(PassiveKeyLogic.Action.UNLOCK, 30_100L, false);
+
+        // 再次冷却期后采样，依然应当允许触发解锁（2次未尝试超时不应锁定）
+        check(logic.onSample(-60f, 35_200L, false, false, true, true) == PassiveKeyLogic.Action.UNLOCK,
+                "两次未尝试超时后不应耗尽配额，仍应允许触发解锁");
+    }
+
+    /** 近场官方蓝牙连接就绪时，若此前因配额耗尽被锁定，应清除锁定并迟到补发解锁。 */
+    private static void nearOfficialConnectionTriggersLateArrivalUnlock() {
+        PassiveKeyLogic logic = new PassiveKeyLogic();
+        check(logic.onSample(-60f, 1_000L, false, false, true, true) == PassiveKeyLogic.Action.UNLOCK,
+                "初次靠近触发解锁");
+        logic.onControlFailed(PassiveKeyLogic.Action.UNLOCK, 1_100L, true);
+
+        check(logic.onSample(-60f, 6_100L, false, false, true, true) == PassiveKeyLogic.Action.UNLOCK,
+                "冷却后允许重试");
+        logic.onControlFailed(PassiveKeyLogic.Action.UNLOCK, 6_200L, true);
+
+        // 此时配额耗尽（unlockRequests >= MAX_REQUESTS_PER_ACTION），普通采样被锁定
+        check(logic.onSample(-60f, 7_000L, false, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "配额耗尽后采样不应触发解锁");
+
+        // 依然在近场（lastDistanceDbm = -60f >= unlockDbm），官方蓝牙连接就绪，触发迟到补发
+        check(logic.onOfficialConnected(7_500L, false, true) == PassiveKeyLogic.Action.UNLOCK,
+                "近场官方蓝牙连接应清除此前锁定并迟到补发解锁");
+        check("OFFICIAL_READY_UNLOCK".equals(logic.getLastOfficialDecision()),
+                "判定分支应为 OFFICIAL_READY_UNLOCK");
+
+        // 反向验证：若已走远（离开近场，低于 unlockDbm），即使官方蓝牙连接也不得迟到补发
+        PassiveKeyLogic farLogic = new PassiveKeyLogic();
+        farLogic.onSample(-60f, 1_000L, false, false, true, true);
+        farLogic.onControlFailed(PassiveKeyLogic.Action.UNLOCK, 1_100L, true);
+        farLogic.onSample(-60f, 6_100L, false, false, true, true);
+        farLogic.onControlFailed(PassiveKeyLogic.Action.UNLOCK, 6_200L, true);
+        farLogic.onSample(-80f, 7_000L, false, false, true, true);
+        check(farLogic.onOfficialConnected(7_500L, false, true) == PassiveKeyLogic.Action.NONE,
+                "非近场连接不得迟到补发解锁");
+    }
+
+    /** 真正尝试发送但失败的请求正常消耗重试配额，两次失败后锁定解锁。 */
+    private static void actualAttemptFailureConsumesQuota() {
+        PassiveKeyLogic logic = new PassiveKeyLogic();
+        check(logic.onSample(-60f, 1_000L, false, false, true, true) == PassiveKeyLogic.Action.UNLOCK,
+                "初次靠近触发解锁");
+        logic.onControlFailed(PassiveKeyLogic.Action.UNLOCK, 1_100L, true);
+
+        check(logic.onSample(-60f, 6_100L, false, false, true, true) == PassiveKeyLogic.Action.UNLOCK,
+                "第 1 次实发失败后，冷却期结束允许重试一次");
+        logic.onControlFailed(PassiveKeyLogic.Action.UNLOCK, 6_200L, true);
+
+        // 已经有 2 次实际尝试失败，配额耗尽
+        check(logic.onSample(-60f, 12_000L, false, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "两次实发失败后配额耗尽，不得再次触发解锁");
+        check("UNLOCK_REQUEST_LIMIT".equals(logic.getLastSampleDecision()),
+                "判定分支应为 UNLOCK_REQUEST_LIMIT");
     }
 
     /** 断言失败时保留场景语义。 */
