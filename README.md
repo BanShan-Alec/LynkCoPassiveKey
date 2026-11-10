@@ -6,7 +6,7 @@
 
 车机中控屏自带的「靠近解锁 / 远离上锁」总开关可以一直关闭，本 App 不依赖也不篡改车机任何底层参数。
 
-[⬇️ 前往 Releases 下载 APK (v4.3.2)](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) · [架构决策记录 (ADR)](docs/adr/) · [统一术语表](GLOSSARY.md) · [领克逆向报告](docs/42_lynkco_apk_reverse_analysis.md)
+[⬇️ 前往 Releases 下载 APK (v4.3.2)](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) · [架构决策记录 (ADR)](docs/adr/) · [统一术语表](GLOSSARY.md) · [设计规范 (Paseo Dark)](DESIGN.md) · [领克逆向报告](docs/42_lynkco_apk_reverse_analysis.md)
 
 ---
 
