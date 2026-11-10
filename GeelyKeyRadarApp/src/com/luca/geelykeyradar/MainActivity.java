@@ -52,13 +52,44 @@ public class MainActivity extends Activity {
     private static final int REQUEST_LOG_EXPORT = 1002;
     private static final ExecutorService LOG_EXPORT_EXECUTOR = Executors.newSingleThreadExecutor();
     private static final AtomicBoolean LOG_EXPORT_BUSY = new AtomicBoolean();
-    private static final int COLOR_BG = Color.rgb(8, 17, 31);
-    private static final int COLOR_CARD = Color.rgb(17, 28, 46);
-    private static final int COLOR_TEXT = Color.rgb(229, 231, 235);
-    private static final int COLOR_MUTED = Color.rgb(148, 163, 184);
-    private static final int COLOR_ACCENT = Color.rgb(56, 189, 248);
-    private static final int COLOR_GREEN = Color.rgb(34, 197, 94);
-    private static final int COLOR_RED = Color.rgb(248, 113, 113);
+    // --- Paseo Dark Design Tokens ---
+    // 主色 (Primary)
+    private static final int COLOR_PRIMARY = Color.parseColor("#20744A");
+    private static final int COLOR_PRIMARY_HOVER = Color.parseColor("#347552");
+    private static final int COLOR_PRIMARY_ACTIVE = Color.parseColor("#1C5237");
+    private static final int COLOR_PRIMARY_BG = Color.parseColor("#183124");
+    private static final int COLOR_PRIMARY_TEXT = Color.parseColor("#7CCBA0");
+
+    // 状态色 (Status)
+    private static final int COLOR_SUCCESS = Color.parseColor("#6CB17B");
+    private static final int COLOR_SUCCESS_TEXT = Color.parseColor("#C4D0C6");
+    private static final int COLOR_WARNING = Color.parseColor("#C09664");
+    private static final int COLOR_WARNING_TEXT = Color.parseColor("#E0DBD2");
+    private static final int COLOR_ERROR = Color.parseColor("#D8847B");
+    private static final int COLOR_ERROR_TEXT = Color.parseColor("#F8ECE9");
+    private static final int COLOR_INFO = Color.parseColor("#5CAAF6");
+
+    // 表面与背景 (Surfaces & Layout)
+    private static final int COLOR_BG = Color.parseColor("#181B1A"); // --paseo-bg-layout
+    private static final int COLOR_CARD = Color.parseColor("#1E2120"); // --paseo-bg-container
+    private static final int COLOR_SURFACE_2 = Color.parseColor("#272A29"); // --paseo-surface-2
+    private static final int COLOR_SURFACE_4 = Color.parseColor("#595B5B"); // --paseo-surface-4
+    private static final int COLOR_BORDER = Color.parseColor("#252B2A"); // --paseo-border
+    private static final int COLOR_BORDER_SECONDARY = Color.parseColor("#2F3534"); // --paseo-border-secondary
+
+    // 文字 (Typography)
+    private static final int COLOR_TEXT = Color.parseColor("#FAFAFA"); // --paseo-text
+    private static final int COLOR_MUTED = Color.parseColor("#A1A5A4"); // --paseo-text-secondary
+    private static final int COLOR_TEXT_TERTIARY = Color.parseColor("#8A8E8D"); // --paseo-text-tertiary
+
+    // 身份色 (Identity)
+    private static final int COLOR_IDENTITY_INK = Color.parseColor("#1F1E1D"); // --paseo-identity-ink
+    private static final int COLOR_IDENTITY_ORANGE = Color.parseColor("#CC8F64"); // --paseo-identity-orange
+
+    // 控件层语义映射
+    private static final int COLOR_ACCENT = COLOR_PRIMARY_TEXT; // #7CCBA0
+    private static final int COLOR_GREEN = COLOR_SUCCESS; // #6CB17B
+    private static final int COLOR_RED = COLOR_ERROR; // #D8847B
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable refreshRunnable = new Runnable() {
@@ -295,8 +326,8 @@ public class MainActivity extends Activity {
         permissionCard.addView(notificationButton, buttonLp());
 
         repairNotificationButton = button("⚡ 一键修复通知监听 (服务自愈)");
-        repairNotificationButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(245, 158, 11)));
-        repairNotificationButton.setTextColor(Color.rgb(15, 23, 42));
+        repairNotificationButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_WARNING));
+        repairNotificationButton.setTextColor(COLOR_IDENTITY_INK);
         repairNotificationButton.setVisibility(View.GONE);
         repairNotificationButton.setOnClickListener(v -> {
             KeyNotificationBridgeService.ensureRebound(MainActivity.this);
@@ -316,7 +347,7 @@ public class MainActivity extends Activity {
 
         if (isVivoDevice()) {
             LinearLayout vivoCard = card();
-            vivoCard.addView(text("vivo / OriginOS 保活与防假死指南", 16, Color.rgb(251, 146, 60), Typeface.BOLD));
+            vivoCard.addView(text("vivo / OriginOS 保活与防假死指南", 16, COLOR_IDENTITY_ORANGE, Typeface.BOLD));
             TextView vivoHelp = text(
                     "系统在应用被划卡强杀后会施加数分钟甚至更久的重绑限制，导致通知监听假死，人到车旁无法自动解锁。\n\n"
                             + "【OriginOS 关键配置】\n"
@@ -649,6 +680,8 @@ public class MainActivity extends Activity {
         final EditText input = new EditText(this);
         input.setHint("例如 123（留空则走自动识别）");
         input.setSingleLine(true);
+        input.setTextColor(COLOR_TEXT);
+        input.setHintTextColor(COLOR_MUTED);
         new AlertDialog.Builder(this)
                 .setTitle("按车架号后3位锁定本车")
                 .setMessage("领克蓝牙广播名为 LynkCo+车架号后3位（或自动识别）。填入后3位（如 123）可在首次靠近前直接锁定本车；不填也会在靠近车辆或领克连接时自动识别。")
@@ -680,24 +713,31 @@ public class MainActivity extends Activity {
         TextView tip = new TextView(this);
         tip.setText("信号越接近 0 表示距离越近：\n• -63 dBm ≈ 1.5米 (主驾门边)\n• -70 dBm ≈ 3.0米\n• -75 dBm ≈ 3.5~4.5米 (默认推荐提前解锁)\n• -82 dBm ≈ 7.0~8.0米 (默认推荐离开上锁)");
         tip.setTextSize(12);
+        tip.setTextColor(COLOR_MUTED);
         box.addView(tip);
 
         final EditText unlockInput = new EditText(this);
         unlockInput.setHint("靠近解锁阈值 dBm (默认 -75)");
         unlockInput.setText(String.format(Locale.US, "%.0f", curUnlock));
         unlockInput.setSingleLine(true);
+        unlockInput.setTextColor(COLOR_TEXT);
+        unlockInput.setHintTextColor(COLOR_MUTED);
         box.addView(unlockInput);
 
         final EditText lockInput = new EditText(this);
         lockInput.setHint("离开上锁阈值 dBm (例如 -82)");
         lockInput.setText(String.format(Locale.US, "%.0f", curLock));
         lockInput.setSingleLine(true);
+        lockInput.setTextColor(COLOR_TEXT);
+        lockInput.setHintTextColor(COLOR_MUTED);
         box.addView(lockInput);
 
         final EditText dwellInput = new EditText(this);
         dwellInput.setHint("离开持续确认秒数 (例如 4.5)");
         dwellInput.setText(String.format(Locale.US, "%.1f", curDwellSec));
         dwellInput.setSingleLine(true);
+        dwellInput.setTextColor(COLOR_TEXT);
+        dwellInput.setHintTextColor(COLOR_MUTED);
         box.addView(dwellInput);
 
         new AlertDialog.Builder(this)
@@ -774,7 +814,8 @@ public class MainActivity extends Activity {
         layout.setPadding(dp(16), dp(16), dp(16), dp(16));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(COLOR_CARD);
-        bg.setCornerRadius(dp(16));
+        bg.setCornerRadius(dp(12));
+        bg.setStroke(dp(1), COLOR_BORDER);
         layout.setBackground(bg);
         return layout;
     }
@@ -793,8 +834,8 @@ public class MainActivity extends Activity {
         button.setText(label);
         button.setAllCaps(false);
         button.setTextSize(14);
-        button.setTextColor(Color.rgb(8, 17, 31));
-        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_ACCENT));
+        button.setTextColor(COLOR_TEXT);
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_PRIMARY));
         return button;
     }
 
@@ -814,6 +855,26 @@ public class MainActivity extends Activity {
         toggle.setTextColor(COLOR_TEXT);
         toggle.setGravity(Gravity.CENTER_VERTICAL);
         toggle.setPadding(0, dp(10), 0, dp(10));
+        toggle.setThumbTintList(new android.content.res.ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_checked},
+                        new int[]{-android.R.attr.state_checked}
+                },
+                new int[]{
+                        COLOR_PRIMARY_TEXT,
+                        COLOR_SURFACE_4
+                }
+        ));
+        toggle.setTrackTintList(new android.content.res.ColorStateList(
+                new int[][]{
+                        new int[]{android.R.attr.state_checked},
+                        new int[]{-android.R.attr.state_checked}
+                },
+                new int[]{
+                        COLOR_PRIMARY,
+                        COLOR_SURFACE_2
+                }
+        ));
         return toggle;
     }
 

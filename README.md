@@ -6,7 +6,7 @@
 
 车机中控屏自带的「靠近解锁 / 远离上锁」总开关可以一直关闭，本 App 不依赖也不篡改车机任何底层参数。
 
-[⬇️ 前往 Releases 下载 APK (v4.3.1)](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) · [架构决策记录 (ADR)](docs/adr/) · [统一术语表](GLOSSARY.md) · [领克逆向报告](docs/42_lynkco_apk_reverse_analysis.md)
+[⬇️ 前往 Releases 下载 APK (v4.3.2)](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) · [架构决策记录 (ADR)](docs/adr/) · [统一术语表](GLOSSARY.md) · [领克逆向报告](docs/42_lynkco_apk_reverse_analysis.md)
 
 ---
 
@@ -62,7 +62,22 @@
 
 ---
 
-## 四、v4.3.1 更新成效（通知假死自愈、防死锁与 vivo 适配）
+## 四、v4.3.2 更新（视觉重构 Paseo Dark 配色体系与发布版本规范化）
+
+本版本全面重构了应用视觉与设计系统，并规范了正式发布版本命名：
+
+1. **全面接入 Paseo Dark 工业级设计 Token 体系**：
+   * **表面与布局（Surfaces）**：全局背景采用深邃沉稳的 `--paseo-bg-layout` (`#181B1A`)，卡片容器采用 `--paseo-bg-container` (`#1E2120`)，搭配精细的 `--paseo-border` (`#252B2A`) 描边与 `12px` 圆角，消除旧版生硬感，呈现现代高级座舱暗黑视觉质感。
+   * **主色与强调（Primary & Accent）**：卡片标题与关键突出文本采用高对比度清爽薄荷绿 `--paseo-primary-text` (`#7CCBA0`)，主交互按钮采用质感森林绿 `--paseo-primary` (`#20744A`) 搭配清晰白字 (`#FAFAFA`)，确保在强光与暗光下的极佳可读性（对比度 $\ge 5.5:1$）。
+   * **状态与引导（Warning & Error & Identity）**：vivo / OriginOS 保活卡片及关键自愈按钮统一接入 `--paseo-warning` (`#C09664`) 与 `--paseo-identity-orange` (`#CC8F64`)，字色搭配深墨色 `--paseo-identity-ink` (`#1F1E1D`)，保证警告信息醒目且契合整体视觉语言。
+   * **控件原生联动**：开关组件（Switch）的 Thumb 与 Track 状态精准映射 Paseo 激活态与非激活表面色，弹窗输入框与提示文本同步适配 Dark 模式下的字色与 Hint 色。
+   * **应用图标一体化**：矢量启动图标（`ic_launcher.xml`）同步更新为 Paseo 专属色彩，与应用界面风格浑然一体。
+2. **发布版本规范化（去除 `-mini` 历史后缀）**：
+   * 正式版本号升级为标准的语义化版本 `v4.3.2`（`versionCode 105`），彻底剥离历史遗留的 `-mini` / `-min` 临时后缀，统一 GitHub Releases、Android 清单（`versionName`）及文档体系。
+
+---
+
+## 五、v4.3.1 历史更新成效（通知假死自愈、防死锁与 vivo 适配）
 
 针对 Android 14+（尤其 vivo OriginOS 等系统）在复杂蓝牙/后台工况下的通知假死、超时误判与死锁问题，v4.3.1 进行了深度重构与专项自愈适配：
 
@@ -82,7 +97,7 @@
 
 ---
 
-## 五、安装与使用说明
+## 六、安装与使用说明
 
 ### 1. 准备工作与系统权限（以主流 Android / OriginOS 为例）
 1. 确保领克官方 App（`com.lynkco.customer`）已登录并完成蓝牙数字钥匙配对；
@@ -103,7 +118,7 @@
 
 ---
 
-## 六、目录结构
+## 七、目录结构
 
 ```text
 .
@@ -132,7 +147,7 @@
 
 ---
 
-## 七、构建与测试
+## 八、构建与测试
 
 本项目支持在标准 Docker 容器中实现纯净、可重现构建：
 
