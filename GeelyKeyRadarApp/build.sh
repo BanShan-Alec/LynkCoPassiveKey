@@ -36,8 +36,9 @@ javac -encoding UTF-8 -source 11 -target 11 -d "$TEST_DIR" \
     "$APP_DIR/src/com/luca/geelykeyradar/DiagnosticLogStore.java" \
     "$APP_DIR/src/com/luca/geelykeyradar/PaseoTheme.java" \
     "$APP_DIR/src/com/luca/geelykeyradar/ProximitySelfHealLogic.java" \
+    "$APP_DIR/src/com/luca/geelykeyradar/RadarVisualModel.java" \
     "$APP_DIR/tests/com/luca/geelykeyradar/"*Test.java
-for TEST_CLASS in PassiveKeyLogicTest RssiPipelineTest PendingControlTest NotificationEpochTest RotatingFileLogTest DiagnosticsTest PaseoThemeTest ProximitySelfHealLogicTest; do
+for TEST_CLASS in PassiveKeyLogicTest RssiPipelineTest PendingControlTest NotificationEpochTest RotatingFileLogTest DiagnosticsTest PaseoThemeTest ProximitySelfHealLogicTest RadarVisualModelTest; do
     java -ea -cp "$TEST_DIR" "com.luca.geelykeyradar.$TEST_CLASS"
 done
 
