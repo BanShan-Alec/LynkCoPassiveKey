@@ -84,6 +84,7 @@ public class MainActivity extends Activity {
     private Switch autoLockSwitch;
     private Switch blockChargingSwitch;
     private Switch blockWirelessChargingSwitch;
+    private Button repairNotificationButton;
     private Button exportLogButton;
     private String exportSnapshot = "service_snapshot=unavailable";
 
@@ -293,6 +294,17 @@ public class MainActivity extends Activity {
                 startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
         permissionCard.addView(notificationButton, buttonLp());
 
+        repairNotificationButton = button("⚡ 一键修复通知监听 (服务自愈)");
+        repairNotificationButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(Color.rgb(245, 158, 11)));
+        repairNotificationButton.setTextColor(Color.rgb(15, 23, 42));
+        repairNotificationButton.setVisibility(View.GONE);
+        repairNotificationButton.setOnClickListener(v -> {
+            KeyNotificationBridgeService.ensureRebound(MainActivity.this);
+            Toast.makeText(MainActivity.this, "已触发通知监听重绑自愈，请等待 1-3 秒...", Toast.LENGTH_SHORT).show();
+            refreshUi();
+        });
+        permissionCard.addView(repairNotificationButton, buttonLp());
+
         Button batteryButton = button("加入电池白名单");
         batteryButton.setOnClickListener(v -> requestBatteryWhitelist());
         permissionCard.addView(batteryButton, buttonLp());
@@ -302,6 +314,32 @@ public class MainActivity extends Activity {
         permissionCard.addView(backgroundButton, buttonLp());
         root.addView(permissionCard, cardLp());
 
+        if (isVivoDevice()) {
+            LinearLayout vivoCard = card();
+            vivoCard.addView(text("vivo / OriginOS 保活与防假死指南", 16, Color.rgb(251, 146, 60), Typeface.BOLD));
+            TextView vivoHelp = text(
+                    "系统在应用被划卡强杀后会施加数分钟甚至更久的重绑限制，导致通知监听假死，人到车旁无法自动解锁。\n\n"
+                            + "【OriginOS 关键配置】\n"
+                            + "1. 后台卡片加锁：在多任务界面下拉本应用卡片加锁（显示锁头🔒），切勿在车门旁划卡杀进程；\n"
+                            + "2. 允许后台高耗电：系统设置 -> 电池 -> 后台耗电管理 -> 本应用设为「允许高后台耗电」；\n"
+                            + "3. 开启自启动权限：系统设置 -> 应用与权限 -> 权限管理 -> 自启动 -> 开启本应用；\n"
+                            + "4. 假死快速自愈：若发现通知监听未连接，点击上方【一键修复通知监听】即可立即唤醒重绑。",
+                    13, COLOR_TEXT, Typeface.NORMAL
+            );
+            LinearLayout.LayoutParams vivoHelpLp = new LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+            );
+            vivoHelpLp.topMargin = dp(10);
+            vivoCard.addView(vivoHelp, vivoHelpLp);
+
+            Button vivoBatteryBtn = button("前往后台高耗电与自启动设置");
+            vivoBatteryBtn.setOnClickListener(v -> openAppDetails());
+            vivoCard.addView(vivoBatteryBtn, buttonLp());
+
+            root.addView(vivoCard, cardLp());
+        }
+
         LinearLayout helpCard = card();
         helpCard.addView(text("使用说明", 16, COLOR_ACCENT, Typeface.BOLD));
         TextView help = text(
@@ -309,7 +347,7 @@ public class MainActivity extends Activity {
                         + "2. 靠近车辆，让领克 App 成功连接一次。\n"
                         + "3. 本应用自动识别本车蓝牙，不需要填写 VIN 或 MAC。\n"
                         + "4. 保持本应用后台运行；息屏放口袋，靠近解锁，离开上锁。\n"
-                        + "5. 若系统清理后台，请在电池设置里允许本应用后台高耗电。",
+                        + "5. 若系统清理后台，请在多任务界面下拉加锁本应用卡片，并在电池设置里允许后台高耗电，切勿手动划卡清理后台。",
                 13, COLOR_TEXT, Typeface.NORMAL
         );
         LinearLayout.LayoutParams helpLp = new LinearLayout.LayoutParams(
@@ -360,6 +398,7 @@ public class MainActivity extends Activity {
         if (exportLogButton != null) exportLogButton.setEnabled(!LOG_EXPORT_BUSY.get());
         PassiveKeyService.Status status = service != null ? service.getStatus() : null;
         boolean notificationAccess = KeyNotificationBridgeService.isNotificationListenerEnabled(this);
+        boolean notificationConnected = KeyNotificationBridgeService.isListenerConnected();
         boolean batteryWhitelisted = isBatteryWhitelisted();
         boolean geelyInstalled = GeelyBridge.isGeelyInstalled(this);
         boolean btPermission = hasBluetoothPermissions();
@@ -367,7 +406,7 @@ public class MainActivity extends Activity {
         if (status == null) {
             statusView.setText("服务：未绑定\n"
                     + "蓝牙权限：" + yesNo(btPermission) + "\n"
-                    + "通知使用权：" + yesNo(notificationAccess) + "\n"
+                    + "通知使用权：" + formatNotificationStatus(notificationAccess, notificationConnected) + "\n"
                     + "电池白名单：" + yesNo(batteryWhitelisted) + "\n"
                     + "领克 App：" + (geelyInstalled ? "已安装" : "未安装"));
             identityView.setText("等待服务启动");
@@ -380,6 +419,7 @@ public class MainActivity extends Activity {
                     "服务总开关：" + (status.serviceEnabled ? "开启 (运行中)" : "已关闭 (完全停止操作)") + "\n"
                             + "蓝牙：" + (status.bluetoothOn ? "已开启" : "未开启")
                             + (status.scanning ? " · 扫描中" : "") + "\n"
+                            + "通知使用权：" + formatNotificationStatus(notificationAccess, notificationConnected) + "\n"
                             + "领克钥匙：" + (status.geelyConnected ? "已连接" : "未连接") + "\n"
                             + "连接态 RSSI：" + (status.gattConnected ? "已挂载" : "未挂载") + "\n"
                             + "充电状态：" + (status.wiredCharging
@@ -423,11 +463,19 @@ public class MainActivity extends Activity {
 
         permissionView.setText(
                 "蓝牙权限：" + yesNo(btPermission) + "\n"
-                        + "通知使用权：" + yesNo(notificationAccess)
-                        + (notificationAccess ? "" : "（必需，否则无法点官方通知栏按钮）") + "\n"
+                        + "通知使用权：" + formatNotificationStatus(notificationAccess, notificationConnected)
+                        + (!notificationAccess ? "（必需，否则无法点官方通知栏按钮）" : "") + "\n"
                         + "电池白名单：" + yesNo(batteryWhitelisted) + "\n"
                         + "领克 App：" + (geelyInstalled ? "已安装" : "未安装")
         );
+
+        if (repairNotificationButton != null) {
+            if (notificationAccess && !notificationConnected) {
+                repairNotificationButton.setVisibility(View.VISIBLE);
+            } else {
+                repairNotificationButton.setVisibility(View.GONE);
+            }
+        }
     }
 
     /** 用户点击后通过系统文件选择器选择本地保存位置，无需存储权限，也不自动发送给他人。 */
@@ -775,5 +823,21 @@ public class MainActivity extends Activity {
 
     private String yesNo(boolean value) {
         return value ? "已开启" : "未开启";
+    }
+
+    private String formatNotificationStatus(boolean access, boolean connected) {
+        if (!access) {
+            return "未开启 (需要系统设置授权)";
+        }
+        if (!connected) {
+            return "⚠️ 已开启但系统未绑定 (假死状态)";
+        }
+        return "正常监听中";
+    }
+
+    private static boolean isVivoDevice() {
+        String manufacturer = Build.MANUFACTURER != null ? Build.MANUFACTURER.toLowerCase(Locale.ROOT) : "";
+        String brand = Build.BRAND != null ? Build.BRAND.toLowerCase(Locale.ROOT) : "";
+        return manufacturer.contains("vivo") || brand.contains("vivo") || brand.contains("iqoo");
     }
 }
