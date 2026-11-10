@@ -115,6 +115,7 @@ public class MainActivity extends Activity {
     private Switch autoLockSwitch;
     private Switch blockChargingSwitch;
     private Switch blockWirelessChargingSwitch;
+    private Button openLynkButton;
     private Button repairNotificationButton;
     private Button exportLogButton;
     private String exportSnapshot = "service_snapshot=unavailable";
@@ -207,6 +208,11 @@ public class MainActivity extends Activity {
         );
         bodyLp.topMargin = dp(10);
         statusCard.addView(statusView, bodyLp);
+
+        openLynkButton = button("打开领克 App");
+        openLynkButton.setOnClickListener(v -> launchLynkCoApp());
+        statusCard.addView(openLynkButton, buttonLp());
+
         root.addView(statusCard, cardLp());
 
         LinearLayout identityCard = card();
@@ -506,6 +512,45 @@ public class MainActivity extends Activity {
             } else {
                 repairNotificationButton.setVisibility(View.GONE);
             }
+        }
+
+        updateOpenLynkButton(geelyInstalled,
+                status != null ? status.geelyConnected : KeyNotificationBridgeService.isGeelyBleConnected(),
+                KeyNotificationBridgeService.isGeelyNotificationPresent());
+    }
+
+    /** 根据领克 App 安装及钥匙/通知就绪状态，动态更新联动唤醒按钮文案与视觉状态。 */
+    private void updateOpenLynkButton(boolean installed, boolean connected, boolean notificationPresent) {
+        if (openLynkButton == null) return;
+        if (!installed) {
+            openLynkButton.setText("打开领克 App (未安装)");
+            openLynkButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_SURFACE_4));
+            openLynkButton.setTextColor(COLOR_TEXT_TERTIARY);
+            return;
+        }
+        if (!notificationPresent || !connected) {
+            openLynkButton.setText("⚡ 一键唤醒领克钥匙 (打开领克 App)");
+            openLynkButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_IDENTITY_ORANGE));
+            openLynkButton.setTextColor(COLOR_IDENTITY_INK);
+        } else {
+            openLynkButton.setText("打开领克 App");
+            openLynkButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_PRIMARY));
+            openLynkButton.setTextColor(COLOR_TEXT);
+        }
+    }
+
+    /** 快捷启动/唤醒领克官方应用，提供轻量交互反馈。 */
+    private void launchLynkCoApp() {
+        boolean launched = GeelyBridge.launchGeelyApp(this);
+        if (!launched) {
+            boolean installed = GeelyBridge.isGeelyInstalled(this);
+            if (!installed) {
+                Toast.makeText(this, "未检测到领克 App，请确认是否已安装", Toast.LENGTH_SHORT).show();
+            } else {
+                Toast.makeText(this, "启动领克 App 失败，请尝试在手机桌面手动打开", Toast.LENGTH_SHORT).show();
+            }
+        } else {
+            Toast.makeText(this, "正在唤醒领克 App...", Toast.LENGTH_SHORT).show();
         }
     }
 

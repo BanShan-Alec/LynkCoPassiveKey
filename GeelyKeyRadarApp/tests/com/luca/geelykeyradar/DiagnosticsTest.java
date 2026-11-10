@@ -21,7 +21,18 @@ public final class DiagnosticsTest {
         reasonsMatchActualBranches();
         exportIsConsistentAndRedacted();
         processMarkerDistinguishesUncleanStop();
+        bridgeLaunchEventsSanitized();
         System.out.println("DiagnosticsTest passed");
+    }
+
+    /** 官方 App 启动事件必须经过脱敏且保留必要原因字段。 */
+    private static void bridgeLaunchEventsSanitized() {
+        DiagnosticText text = new DiagnosticText("test-salt");
+        String failedEvent = text.sanitize("Bridge LAUNCH_APP_FAILED reason=not_installed pkg=com.lynkco.customer");
+        check(failedEvent.contains("LAUNCH_APP_FAILED") && failedEvent.contains("com.lynkco.customer"),
+                "官方App启动失败事件必须包含原因与包名");
+        String errorEvent = text.sanitize("Bridge LAUNCH_APP_ERROR " + DiagnosticText.errorSummary(new RuntimeException("token=secret-token")));
+        check(!errorEvent.contains("secret-token"), "启动异常信息不得包含敏感凭证");
     }
 
     /** 地址指纹可关联但无法直接识别车辆，敏感键值和异常正文不能进入导出。 */

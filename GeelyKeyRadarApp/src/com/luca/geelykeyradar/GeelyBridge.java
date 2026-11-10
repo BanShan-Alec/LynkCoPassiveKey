@@ -109,6 +109,40 @@ final class GeelyBridge {
     }
 
     /**
+     * 安全启动/唤醒领克官方 App。
+     *
+     * @param context Android 上下文
+     * @return true 表示成功发起启动，false 表示未安装或启动失败
+     */
+    static boolean launchGeelyApp(Context context) {
+        if (context == null) return false;
+        DiagnosticLog.initialize(context);
+        try {
+            if (!isGeelyInstalled(context)) {
+                DiagnosticLog.event("Bridge", "LAUNCH_APP_FAILED", "reason=not_installed pkg=" + GEELY_PKG);
+                Log.w(TAG, "未安装领克 App，无法启动");
+                return false;
+            }
+            PackageManager pm = context.getPackageManager();
+            Intent intent = pm.getLaunchIntentForPackage(GEELY_PKG);
+            if (intent == null) {
+                DiagnosticLog.event("Bridge", "LAUNCH_APP_FAILED", "reason=no_launch_intent pkg=" + GEELY_PKG);
+                Log.w(TAG, "未找到领克 App 启动入口 Intent");
+                return false;
+            }
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            context.startActivity(intent);
+            DiagnosticLog.event("Bridge", "LAUNCH_APP_SUCCESS", "pkg=" + GEELY_PKG);
+            Log.i(TAG, "已成功拉起领克官方 App");
+            return true;
+        } catch (Throwable t) {
+            DiagnosticLog.bridgeError("Bridge", "LAUNCH_APP_ERROR", t);
+            Log.e(TAG, "拉起领克官方 App 异常: " + t.getMessage(), t);
+            return false;
+        }
+    }
+
+    /**
      * 绑定官方钥匙服务做保活；重复调用是安全的。
      */
     static synchronized void bindKeepAlive(Context context) {
