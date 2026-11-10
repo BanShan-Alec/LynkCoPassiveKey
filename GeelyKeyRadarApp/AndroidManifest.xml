@@ -68,6 +68,12 @@
             </intent-filter>
         </activity>
 
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait"
+            android:configChanges="orientation|screenSize|keyboardHidden" />
+
         <service
             android:name=".PassiveKeyService"
             android:enabled="true"
