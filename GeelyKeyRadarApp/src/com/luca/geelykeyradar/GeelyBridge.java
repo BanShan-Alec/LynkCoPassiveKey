@@ -9,6 +9,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.IBinder;
 import android.util.Log;
 
@@ -128,15 +129,17 @@ final class GeelyBridge {
             Log.w(TAG, "绑定 MiuiService 失败: " + t.getMessage());
         }
 
-        try {
-            Intent dk = new Intent(ACTION_DK_START);
-            dk.setComponent(new ComponentName(GEELY_PKG, GEELY_DK_SERVICE));
-            boolean accepted = context.bindService(dk, KEEP_ALIVE_CONNECTION,
-                    Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT);
-            DiagnosticLog.detail("Bridge", "KEEPALIVE_BIND_REQUEST", "component=DigitalKeyBgService accepted=" + accepted);
-        } catch (Throwable ignored) {
-            // DigitalKeyBgService 在新版清单里可能是非 exported，失败不影响 MiuiService 主链路。
-            DiagnosticLog.detail("Bridge", "OPTIONAL_KEEPALIVE_BIND_ERROR", DiagnosticText.errorSummary(ignored));
+        if (Build.VERSION.SDK_INT < 34) {
+            try {
+                Intent dk = new Intent(ACTION_DK_START);
+                dk.setComponent(new ComponentName(GEELY_PKG, GEELY_DK_SERVICE));
+                boolean accepted = context.bindService(dk, KEEP_ALIVE_CONNECTION,
+                        Context.BIND_AUTO_CREATE | Context.BIND_IMPORTANT);
+                DiagnosticLog.detail("Bridge", "KEEPALIVE_BIND_REQUEST", "component=DigitalKeyBgService accepted=" + accepted);
+            } catch (Throwable ignored) {
+                // DigitalKeyBgService 在新版清单里可能是非 exported，失败不影响 MiuiService 主链路。
+                DiagnosticLog.detail("Bridge", "OPTIONAL_KEEPALIVE_BIND_ERROR", DiagnosticText.errorSummary(ignored));
+            }
         }
     }
 
@@ -178,30 +181,38 @@ final class GeelyBridge {
                     + " component=GLDkConnectionService " + DiagnosticText.errorSummary(ignored));
         }
 
-        // 3. 显式启动 DigitalKeyBgService，突破部分 OEM 的后台启动限制
-        try {
-            Intent dk = new Intent(ACTION_DK_START);
-            dk.setComponent(new ComponentName(GEELY_PKG, GEELY_DK_SERVICE));
-            dk.putExtra("setCarId", safeCarId);
-            dk.putExtra("ScanResult", scanResult);
-            ComponentName result = context.startService(dk);
-            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_RETURN", "wake_id=" + wakeId
-                    + " component=DigitalKeyBgService action=DK_START accepted=" + (result != null));
-        } catch (Throwable ignored) {
-            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_ERROR", "wake_id=" + wakeId
-                    + " component=DigitalKeyBgService action=DK_START " + DiagnosticText.errorSummary(ignored));
-        }
-        try {
-            Intent pendingScan = new Intent(ACTION_PENDING_SCAN);
-            pendingScan.setComponent(new ComponentName(GEELY_PKG, GEELY_DK_SERVICE));
-            pendingScan.putExtra("setCarId", safeCarId);
-            pendingScan.putExtra("ScanResult", scanResult);
-            ComponentName result = context.startService(pendingScan);
-            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_RETURN", "wake_id=" + wakeId
-                    + " component=DigitalKeyBgService action=PENDING_SCAN accepted=" + (result != null));
-        } catch (Throwable ignored) {
-            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_ERROR", "wake_id=" + wakeId
-                    + " component=DigitalKeyBgService action=PENDING_SCAN " + DiagnosticText.errorSummary(ignored));
+        // 3. 显式启动 DigitalKeyBgService：
+        // Android 14+ (SDK >= 34) 下非 exported 服务跨进程 startService 会抛出 SecurityException，
+        // 且受系统后台启动限制，直接跳过，依托合规的 MiuiReceiver 和 MiuiService 完成唤醒。
+        if (Build.VERSION.SDK_INT < 34) {
+            try {
+                Intent dk = new Intent(ACTION_DK_START);
+                dk.setComponent(new ComponentName(GEELY_PKG, GEELY_DK_SERVICE));
+                dk.putExtra("setCarId", safeCarId);
+                dk.putExtra("ScanResult", scanResult);
+                ComponentName result = context.startService(dk);
+                DiagnosticLog.detail("Bridge", "WAKE_SERVICE_RETURN", "wake_id=" + wakeId
+                        + " component=DigitalKeyBgService action=DK_START accepted=" + (result != null));
+            } catch (Throwable ignored) {
+                DiagnosticLog.detail("Bridge", "WAKE_SERVICE_ERROR", "wake_id=" + wakeId
+                        + " component=DigitalKeyBgService action=DK_START " + DiagnosticText.errorSummary(ignored));
+            }
+            try {
+                Intent pendingScan = new Intent(ACTION_PENDING_SCAN);
+                pendingScan.setComponent(new ComponentName(GEELY_PKG, GEELY_DK_SERVICE));
+                pendingScan.putExtra("setCarId", safeCarId);
+                pendingScan.putExtra("ScanResult", scanResult);
+                ComponentName result = context.startService(pendingScan);
+                DiagnosticLog.detail("Bridge", "WAKE_SERVICE_RETURN", "wake_id=" + wakeId
+                        + " component=DigitalKeyBgService action=PENDING_SCAN accepted=" + (result != null));
+            } catch (Throwable ignored) {
+                DiagnosticLog.detail("Bridge", "WAKE_SERVICE_ERROR", "wake_id=" + wakeId
+                        + " component=DigitalKeyBgService action=PENDING_SCAN " + DiagnosticText.errorSummary(ignored));
+            }
+        } else {
+            DiagnosticLog.detail("Bridge", "WAKE_SERVICE_SKIPPED", "wake_id=" + wakeId
+                    + " component=DigitalKeyBgService reason=sdk_ge_34");
+            Log.d(TAG, "Android 14+ 跳过 DigitalKeyBgService 显式启动，依赖 MiuiService/Receiver 唤醒");
         }
 
         bindKeepAlive(context);
