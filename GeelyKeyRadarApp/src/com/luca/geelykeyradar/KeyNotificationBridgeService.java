@@ -147,10 +147,6 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
         return flat.contains(cn.flattenToString()) || flat.contains(cn.flattenToShortString());
     }
 
-    public static long getLastReboundToggleAtMs() {
-        return lastReboundToggleAtMs;
-    }
-
     /**
      * Ensures Android's NotificationManagerService actively binds KeyNotificationBridgeService
      * (recovering from any prior force-stop or package reinstall) and immediately scans Geely's notification.

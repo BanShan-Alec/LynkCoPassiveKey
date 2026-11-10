@@ -616,6 +616,17 @@ public final class PassiveKeyLogicTest {
         farLogic.onSample(-80f, 7_000L, false, false, true, true);
         check(farLogic.onOfficialConnected(7_500L, false, true) == PassiveKeyLogic.Action.NONE,
                 "非近场连接不得迟到补发解锁");
+
+        // 验证：未尝试超时后的 5s 冷却期内，若官方蓝牙连通，迟到补发快速路径仍能立即开锁
+        PassiveKeyLogic timeoutLogic = new PassiveKeyLogic();
+        check(timeoutLogic.onSample(-60f, 1_000L, false, false, true, true) == PassiveKeyLogic.Action.UNLOCK,
+                "初次靠近触发解锁");
+        timeoutLogic.onControlFailed(PassiveKeyLogic.Action.UNLOCK, 13_000L, false); // 未尝试超时，回滚配额但设置 5s 冷却
+        // 仅过去 2 秒（处于 5s 冷却内），官方蓝牙就绪
+        check(timeoutLogic.onOfficialConnected(15_000L, false, true) == PassiveKeyLogic.Action.UNLOCK,
+                "处于超时冷却期内的近场官方连接仍应立即触发迟到补发");
+        check("OFFICIAL_READY_UNLOCK".equals(timeoutLogic.getLastOfficialDecision()),
+                "判定分支应为 OFFICIAL_READY_UNLOCK");
     }
 
     /** 真正尝试发送但失败的请求正常消耗重试配额，两次失败后锁定解锁。 */

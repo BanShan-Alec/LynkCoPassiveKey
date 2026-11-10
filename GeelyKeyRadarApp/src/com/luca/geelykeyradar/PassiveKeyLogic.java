@@ -361,7 +361,7 @@ final class PassiveKeyLogic {
             approachLatched = true;
             return officialDecision(Action.NONE, "DRIVING_OR_WIRED_BLOCK", nowMs);
         }
-        if (autoUnlock && !driving && lastDistanceDbm >= unlockDbm && unlockRequests >= MAX_REQUESTS_PER_ACTION) {
+        if (autoUnlock && !driving && lastDistanceDbm >= unlockDbm) {
             unlockRequests = 0;
             controlRetryAfterMs = 0L;
         }
@@ -520,6 +520,9 @@ final class PassiveKeyLogic {
             approachLatched = false;
             lastUnlockAtMs = 0L;
         } else {
+            if (!actuallyAttempted && lockRequests > 0) {
+                lockRequests--;
+            }
             resetLockDwell();
         }
     }
