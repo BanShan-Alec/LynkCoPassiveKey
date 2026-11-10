@@ -115,7 +115,7 @@ public class MainActivity extends Activity {
     private Switch autoLockSwitch;
     private Switch blockChargingSwitch;
     private Switch blockWirelessChargingSwitch;
-    private Button openLynkButton;
+    private Button openOfficialAppButton;
     private Button repairNotificationButton;
     private Button exportLogButton;
     private String exportSnapshot = "service_snapshot=unavailable";
@@ -209,9 +209,9 @@ public class MainActivity extends Activity {
         bodyLp.topMargin = dp(10);
         statusCard.addView(statusView, bodyLp);
 
-        openLynkButton = button("打开领克 App");
-        openLynkButton.setOnClickListener(v -> launchLynkCoApp());
-        statusCard.addView(openLynkButton, buttonLp());
+        openOfficialAppButton = button("打开领克官方 App");
+        openOfficialAppButton.setOnClickListener(v -> launchOfficialApp());
+        statusCard.addView(openOfficialAppButton, buttonLp());
 
         root.addView(statusCard, cardLp());
 
@@ -514,43 +514,46 @@ public class MainActivity extends Activity {
             }
         }
 
-        updateOpenLynkButton(geelyInstalled,
+        updateOfficialAppButton(geelyInstalled,
                 status != null ? status.geelyConnected : KeyNotificationBridgeService.isGeelyBleConnected(),
                 KeyNotificationBridgeService.isGeelyNotificationPresent());
     }
 
-    /** 根据领克 App 安装及钥匙/通知就绪状态，动态更新联动唤醒按钮文案与视觉状态。 */
-    private void updateOpenLynkButton(boolean installed, boolean connected, boolean notificationPresent) {
-        if (openLynkButton == null) return;
+    /** 根据领克官方 App 安装及通知桥接/连接状态，动态更新联动唤醒按钮文案与视觉状态。 */
+    private void updateOfficialAppButton(boolean installed, boolean connected, boolean notificationPresent) {
+        if (openOfficialAppButton == null) return;
         if (!installed) {
-            openLynkButton.setText("打开领克 App (未安装)");
-            openLynkButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_SURFACE_4));
-            openLynkButton.setTextColor(COLOR_TEXT_TERTIARY);
+            openOfficialAppButton.setEnabled(false);
+            openOfficialAppButton.setText("未安装领克官方 App");
+            openOfficialAppButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_SURFACE_4));
+            openOfficialAppButton.setTextColor(COLOR_TEXT_TERTIARY);
             return;
         }
+        openOfficialAppButton.setEnabled(true);
         if (!notificationPresent || !connected) {
-            openLynkButton.setText("⚡ 一键唤醒领克钥匙 (打开领克 App)");
-            openLynkButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_IDENTITY_ORANGE));
-            openLynkButton.setTextColor(COLOR_IDENTITY_INK);
+            openOfficialAppButton.setText("⚡ 启动领克官方 App (建立通知桥接)");
+            openOfficialAppButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_IDENTITY_ORANGE));
+            openOfficialAppButton.setTextColor(COLOR_IDENTITY_INK);
         } else {
-            openLynkButton.setText("打开领克 App");
-            openLynkButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_PRIMARY));
-            openLynkButton.setTextColor(COLOR_TEXT);
+            openOfficialAppButton.setText("打开领克官方 App");
+            openOfficialAppButton.setBackgroundTintList(android.content.res.ColorStateList.valueOf(COLOR_PRIMARY));
+            openOfficialAppButton.setTextColor(COLOR_TEXT);
         }
     }
 
-    /** 快捷启动/唤醒领克官方应用，提供轻量交互反馈。 */
-    private void launchLynkCoApp() {
-        boolean launched = GeelyBridge.launchGeelyApp(this);
-        if (!launched) {
-            boolean installed = GeelyBridge.isGeelyInstalled(this);
-            if (!installed) {
-                Toast.makeText(this, "未检测到领克 App，请确认是否已安装", Toast.LENGTH_SHORT).show();
-            } else {
-                Toast.makeText(this, "启动领克 App 失败，请尝试在手机桌面手动打开", Toast.LENGTH_SHORT).show();
-            }
-        } else {
-            Toast.makeText(this, "正在唤醒领克 App...", Toast.LENGTH_SHORT).show();
+    /** 快捷启动领克官方应用，提供轻量交互反馈。 */
+    private void launchOfficialApp() {
+        GeelyBridge.LaunchResult result = GeelyBridge.launchOfficialApp(this);
+        switch (result) {
+            case SUCCESS:
+                Toast.makeText(this, "正在启动领克官方 App...", Toast.LENGTH_SHORT).show();
+                break;
+            case NOT_INSTALLED:
+                Toast.makeText(this, "未检测到领克官方 App，请先安装", Toast.LENGTH_SHORT).show();
+                break;
+            case FAILED:
+                Toast.makeText(this, "启动领克官方 App 失败，请尝试在手机桌面手动打开", Toast.LENGTH_SHORT).show();
+                break;
         }
     }
 
