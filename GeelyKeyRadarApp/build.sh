@@ -25,7 +25,7 @@ find "$DEX_DIR" -type f -delete 2>/dev/null || true
 find "$TEST_DIR" -type f -delete 2>/dev/null || true
 
 echo "[1/6] 纯逻辑单测"
-javac -source 11 -target 11 -d "$TEST_DIR" \
+javac -encoding UTF-8 -source 11 -target 11 -d "$TEST_DIR" \
     "$APP_DIR/src/com/luca/geelykeyradar/PassiveKeyLogic.java" \
     "$APP_DIR/src/com/luca/geelykeyradar/RssiFilter.java" \
     "$APP_DIR/src/com/luca/geelykeyradar/PendingControl.java" \
@@ -48,7 +48,7 @@ echo "[2/6] 编译资源"
     "$BUILD_DIR/res.zip"
 
 echo "[3/6] 编译 Java"
-javac -source 11 -target 11 -cp "$ANDROID_JAR" -d "$CLASSES_DIR" \
+javac -encoding UTF-8 -source 11 -target 11 -cp "$ANDROID_JAR" -d "$CLASSES_DIR" \
     $(find "$GEN_DIR" -name "R.java") \
     $(find "$APP_DIR/src" -name "*.java")
 
@@ -74,6 +74,8 @@ fi
     --out "$APK" \
     "$BUILD_DIR/aligned.apk"
 echo "APK: $APK"
+cp "$APK" "$APP_DIR/LynkCoPassiveKey.apk" 2>/dev/null || true
+cp "$APK" "$APP_DIR/../LynkCoPassiveKey.apk" 2>/dev/null || true
 
 if [ "${SKIP_INSTALL:-0}" = "1" ]; then
     echo "[6/6] 已跳过安装，APK 构建完成"

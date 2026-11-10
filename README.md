@@ -6,7 +6,7 @@
 
 车机中控屏自带的「靠近解锁 / 远离上锁」总开关可以一直关闭，本 App 不依赖也不篡改车机任何底层参数。
 
-[⬇️ 前往 Releases 下载 APK](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) · [架构决策记录 (ADR)](docs/adr/) · [统一术语表](GLOSSARY.md) · [领克逆向报告](docs/42_lynkco_apk_reverse_analysis.md)
+[⬇️ 前往 Releases 下载 APK (v4.3.1)](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) · [架构决策记录 (ADR)](docs/adr/) · [统一术语表](GLOSSARY.md) · [领克逆向报告](docs/42_lynkco_apk_reverse_analysis.md)
 
 ---
 
@@ -62,7 +62,27 @@
 
 ---
 
-## 四、安装与使用说明
+## 四、v4.3.1 更新成效（通知假死自愈、防死锁与 vivo 适配）
+
+针对 Android 14+（尤其 vivo OriginOS 等系统）在复杂蓝牙/后台工况下的通知假死、超时误判与死锁问题，v4.3.1 进行了深度重构与专项自愈适配：
+
+1. **状态机超时解耦与配额防死锁**：
+   * 彻底解耦“通道未就绪等待超时”与“业务物理发送失败”。当官方通知尚未就绪（`attempts == 0`）发生等待超时取消时，自动回滚重试配额（`unlockRequests--` / `lockRequests--`），消除由于通道延迟消耗配额导致的 `UNLOCK_REQUEST_LIMIT` 永久死锁。
+2. **迟到补发快速路径（Late Arrival Fast-Path）**：
+   * 官方通知与蓝牙连通瞬间，若检测到车主当前仍处于近场门限内（$\ge -75\,\text{dBm}$）且本轮会话尚未开锁，**无条件抹平冷却期并即刻触发 `OFFICIAL_READY_UNLOCK`**（0 秒延迟秒级开锁），彻底杜绝车主到车门前“罚站”。
+3. **系统级通知监听假死自愈机制**：
+   * 针对用户划卡强杀进程后系统 NMS（NotificationManagerService）施加惩罚性重绑限制、导致监听服务长达数分钟假死的问题，在重绑请求中引入 `COMPONENT_ENABLED_STATE_DISABLED -> ENABLED` 组件状态跃迁与 10 秒防抖控制，迫使系统 PMS 广播组件变更，促使 NMS 在数秒内强制重建绑定。
+4. **根除跨进程 SecurityException 异常风暴**：
+   * 在 Android 14+（API $\ge 34$）上旁路对官方非 exported 的 `DigitalKeyBgService` 显式 `startService` 与保活绑定，全面收敛至稳定广播唤醒与 `MiuiService` 通道，消除了日志中多达 216+ 次异常风暴与无谓功耗。
+5. **UI 三态权限精准诊断与一键自愈**：
+   * 权限卡片升级为三态诊断：`❌ 未开启权限` / `⚠️ 已开启但系统未绑定 (假死状态)` / `✅ 正常监听中`；
+   * 当检测到假死状态时，动态高亮呈现【一键修复通知监听 (服务自愈)】按钮，点击即刻触发自愈跃迁与重绑刷新。
+6. **vivo / OriginOS 专属保活指南**：
+   * 动态识别 vivo / iQOO 设备，在界面显式呈现 OriginOS 专属保活指引：指引车主在近期任务列表中将本 App 卡片**下拉加锁（🔒）**、切勿在车门旁划卡杀进程，并提供一键跳转“允许高后台耗电”与“自启动”系统设置入口。
+
+---
+
+## 五、安装与使用说明
 
 ### 1. 准备工作与系统权限（以主流 Android / OriginOS 为例）
 1. 确保领克官方 App（`com.lynkco.customer`）已登录并完成蓝牙数字钥匙配对；
@@ -83,7 +103,7 @@
 
 ---
 
-## 五、目录结构
+## 六、目录结构
 
 ```text
 .
@@ -112,7 +132,7 @@
 
 ---
 
-## 六、构建与测试
+## 七、构建与测试
 
 本项目支持在标准 Docker 容器中实现纯净、可重现构建：
 
