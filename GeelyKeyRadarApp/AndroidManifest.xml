@@ -53,6 +53,7 @@
         android:allowBackup="false"
         android:debuggable="true"
         android:icon="@drawable/ic_launcher"
+        android:roundIcon="@drawable/ic_launcher"
         android:label="领克无感钥匙"
         android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
 
