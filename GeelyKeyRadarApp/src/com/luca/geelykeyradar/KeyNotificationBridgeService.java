@@ -75,6 +75,8 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
     private static volatile Boolean textConnectionHint = null;
     private static volatile String lastControlDiagnostic = "transport=NONE result=NONE";
     private static volatile String lastParseDiagnostic = "NO_NOTIFICATION";
+    private static volatile long lastReboundToggleAtMs = 0L;
+    private static final long REBOUND_TOGGLE_DEBOUNCE_MS = 10000L;
 
     // 官方通知从未连接切换到已连接时通知主服务；待发动作统一由主服务管理，避免两套队列重复点击。
     private static volatile Runnable stateListener;
@@ -145,6 +147,10 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
         return flat.contains(cn.flattenToString()) || flat.contains(cn.flattenToShortString());
     }
 
+    public static long getLastReboundToggleAtMs() {
+        return lastReboundToggleAtMs;
+    }
+
     /**
      * Ensures Android's NotificationManagerService actively binds KeyNotificationBridgeService
      * (recovering from any prior force-stop or package reinstall) and immediately scans Geely's notification.
@@ -162,16 +168,22 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
                 return;
             }
             ComponentName cn = new ComponentName(context, KeyNotificationBridgeService.class);
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastReboundToggleAtMs >= REBOUND_TOGGLE_DEBOUNCE_MS) {
+                PackageManager pm = context.getPackageManager();
+                if (pm != null) {
+                    pm.setComponentEnabledSetting(cn,
+                            PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                            PackageManager.DONT_KILL_APP);
+                    pm.setComponentEnabledSetting(cn,
+                            PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                            PackageManager.DONT_KILL_APP);
+                    lastReboundToggleAtMs = now;
+                }
+            }
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
                 DiagnosticLog.event("Notification", "LISTENER_REBIND_REQUEST", "");
                 NotificationListenerService.requestRebind(cn);
-            }
-            // Also toggle component enabled state if needed to force NMS re-registration after APK update
-            PackageManager pm = context.getPackageManager();
-            if (pm != null) {
-                pm.setComponentEnabledSetting(cn,
-                        PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
-                        PackageManager.DONT_KILL_APP);
             }
         } catch (Throwable t) {
             DiagnosticLog.bridgeError("Notification", "LISTENER_REBIND_ERROR", t);
