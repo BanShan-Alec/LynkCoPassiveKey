@@ -12,6 +12,7 @@ import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
@@ -201,11 +202,11 @@ public class SettingsActivity extends Activity {
         );
         identityCard.addView(identityHint, bodyLp());
 
-        Button bindSuffixBtn = button("填入车架号后3位锁定本车（可选）", PaseoTheme.COLOR_CARD, PaseoTheme.COLOR_TEXT);
+        Button bindSuffixBtn = button("填入车架号后3位锁定本车（可选）", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
         bindSuffixBtn.setOnClickListener(v -> promptBindByVinSuffix());
         identityCard.addView(bindSuffixBtn, buttonLp());
 
-        Button resetBtn = button("重新学习本车", PaseoTheme.COLOR_CARD, PaseoTheme.COLOR_TEXT);
+        Button resetBtn = button("重新学习本车", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
         resetBtn.setOnClickListener(v -> confirmResetIdentity());
         identityCard.addView(resetBtn, buttonLp());
         root.addView(identityCard, cardLp());
@@ -241,7 +242,7 @@ public class SettingsActivity extends Activity {
         thresholdView = text("", 13, PaseoTheme.COLOR_TEXT, Typeface.NORMAL);
         prefCard.addView(thresholdView, bodyLp());
 
-        Button customThresholdBtn = button("自定义靠近 / 离开门限参数", PaseoTheme.COLOR_CARD, PaseoTheme.COLOR_TEXT);
+        Button customThresholdBtn = button("自定义靠近 / 离开门限参数", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
         customThresholdBtn.setOnClickListener(v -> promptCustomThresholds());
         prefCard.addView(customThresholdBtn, buttonLp());
         root.addView(prefCard, cardLp());
@@ -267,19 +268,19 @@ public class SettingsActivity extends Activity {
         );
         keepAliveCard.addView(healHint, bodyLp());
 
-        Button btPermissionBtn = button("授予蓝牙权限", PaseoTheme.COLOR_CARD, PaseoTheme.COLOR_TEXT);
+        Button btPermissionBtn = button("授予蓝牙权限", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
         btPermissionBtn.setOnClickListener(v -> requestBluetoothPermissions());
         keepAliveCard.addView(btPermissionBtn, buttonLp());
 
-        Button notifAccessBtn = button("开启通知使用权", PaseoTheme.COLOR_CARD, PaseoTheme.COLOR_TEXT);
+        Button notifAccessBtn = button("开启通知使用权", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
         notifAccessBtn.setOnClickListener(v -> startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)));
         keepAliveCard.addView(notifAccessBtn, buttonLp());
 
-        Button batteryBtn = button("加入电池白名单", PaseoTheme.COLOR_CARD, PaseoTheme.COLOR_TEXT);
+        Button batteryBtn = button("加入电池白名单", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
         batteryBtn.setOnClickListener(v -> requestBatteryWhitelist());
         keepAliveCard.addView(batteryBtn, buttonLp());
 
-        Button appDetailsBtn = button("打开系统应用管理 (允许后台高耗电与自启动)", PaseoTheme.COLOR_CARD, PaseoTheme.COLOR_TEXT);
+        Button appDetailsBtn = button("打开系统应用管理 (允许后台高耗电与自启动)", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
         appDetailsBtn.setOnClickListener(v -> openAppDetails());
         keepAliveCard.addView(appDetailsBtn, buttonLp());
         root.addView(keepAliveCard, cardLp());
@@ -297,7 +298,7 @@ public class SettingsActivity extends Activity {
         exportLogButton.setOnClickListener(v -> chooseLogExportDestination());
         diagCard.addView(exportLogButton, buttonLp());
 
-        Button clearLogBtn = button("清空诊断日志", PaseoTheme.COLOR_CARD, PaseoTheme.COLOR_TEXT);
+        Button clearLogBtn = button("清空诊断日志", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
         clearLogBtn.setOnClickListener(v -> {
             if (service != null) {
                 service.clearLogs();
@@ -637,15 +638,24 @@ public class SettingsActivity extends Activity {
         button.setText(label);
         button.setAllCaps(false);
         button.setTextSize(14);
+        button.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         button.setTextColor(textColor);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(bgColor);
         bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
-        if (bgColor == PaseoTheme.COLOR_CARD) {
-            bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), PaseoTheme.COLOR_BORDER);
+        if (bgColor == PaseoTheme.COLOR_PRIMARY || bgColor == PaseoTheme.COLOR_WARNING) {
+            bg.setStroke(0, 0);
+        } else {
+            // 次级操作按钮：浮动于卡片 (#1E2120) 之上，采用清晰可见的次级边框 (#3D4643) 与 surface-2 (#272A29) 底色
+            bg.setColor(PaseoTheme.COLOR_SURFACE_2);
+            bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), 0xFF3D4643);
         }
-        button.setBackground(bg);
-        button.setBackgroundTintList(ColorStateList.valueOf(bgColor));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            int rippleColor = (bgColor == PaseoTheme.COLOR_WARNING) ? 0x22000000 : 0x22FFFFFF;
+            button.setBackground(new RippleDrawable(ColorStateList.valueOf(rippleColor), bg, null));
+        } else {
+            button.setBackground(bg);
+        }
         return button;
     }
 
