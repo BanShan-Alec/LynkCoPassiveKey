@@ -92,6 +92,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
     private volatile VehicleIdentity identity;
     private volatile PassiveKeyLogic logic = new PassiveKeyLogic();
     private volatile RssiFilter rssiFilter = new RssiFilter();
+    private final ProximitySelfHealLogic proximitySelfHeal = new ProximitySelfHealLogic();
     private BluetoothManager bluetoothManager;
     private BluetoothAdapter bluetoothAdapter;
     private BluetoothLeScanner bleScanner;
@@ -543,6 +544,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         cancelPendingControl("服务总开关变更");
         if (enabled) {
             logic.reset();
+            proximitySelfHeal.reset();
             rssiFilter = new RssiFilter();
             lastSampleAtMs = 0L;
             geelyConnected = false;
@@ -926,6 +928,7 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         if (!geelyConnected) {
             maybeWakeGeely(ad, now);
         }
+        maybeProximityRebindNotification(now);
         if (!gattConnected || lastGattRssiAtMs == 0L
                 || (now - lastGattRssiAtMs) > PassiveKeyLogic.SIGNAL_STALE_MS) {
             onFreshRssi(ad.rssi, "广播 " + ad.sourceTag, ad);
@@ -934,6 +937,17 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         }
         if (identity == null && geelyConnected) {
             maybeLearnVehicle(now);
+        }
+    }
+
+    /** 靠近车辆时若发现通知监听处于假死断开态，立即毫秒级静默重绑自愈。 */
+    private void maybeProximityRebindNotification(long now) {
+        if (!serviceEnabled) return;
+        boolean perm = KeyNotificationBridgeService.isNotificationListenerEnabled(this);
+        boolean connected = KeyNotificationBridgeService.isListenerConnected();
+        if (proximitySelfHeal.shouldTriggerRebound(now, perm, connected)) {
+            appendLog("⚡ 靠近感应：扫描到爱车信号，检测到通知通道断开，立即触发自愈重绑");
+            KeyNotificationBridgeService.ensureRebound(this);
         }
     }
 
