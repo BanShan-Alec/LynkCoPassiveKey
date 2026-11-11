@@ -6,7 +6,7 @@
 
 车机中控屏自带的「靠近解锁 / 远离上锁」总开关可以一直关闭，本 App 不依赖也不篡改车机任何底层参数。
 
-[⬇️ 前往 Releases 下载 APK (v4.3.2)](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) · [架构决策记录 (ADR)](docs/adr/) · [统一术语表](GLOSSARY.md) · [设计规范 (Paseo Dark)](DESIGN.md) · [领克逆向报告](docs/42_lynkco_apk_reverse_analysis.md)
+[⬇️ 前往 Releases 下载 APK (v4.4.0)](https://github.com/BanShan-Alec/LynkCoPassiveKey/releases) · [架构决策记录 (ADR)](docs/adr/) · [统一术语表](GLOSSARY.md) · [设计规范 (Paseo Dark)](DESIGN.md) · [领克逆向报告](docs/42_lynkco_apk_reverse_analysis.md)
 
 ---
 
@@ -62,7 +62,29 @@
 
 ---
 
-## 四、v4.3.2 更新（视觉重构 Paseo Dark 配色体系与发布版本规范化）
+## 四、v4.4.0 更新（走动冷暖雷达 HUD、新车主就绪清单与全新领克车标）
+
+本版本是自 v4.0 裁剪以来最大幅度的交互与视觉升级，彻底去除工程噪音，面向普通领克车主带来媲美原厂现代座舱的无感车控体验：
+
+1. **极简车主 HUD 首页与「走动冷暖雷达 (Hot/Cold Radar)」**：
+   * **冷暖色温流动感知**：首页中心常驻冷暖雷达，通过 RenderThread 硬件加速的三层水波纹脉冲（RippleBackground）动态表达空间逼近；信号从远场冰蓝 (`#5CAAF6`) 流动渐变为中距离暖金 (`#CC8F64`)，在逼近并跨越开锁线瞬间迸发翡翠绿 (`#7CCBA0`) 脉冲，附带 30ms 触觉轻震反馈。
+   * **车机级极简布局**：顶部微徽章呈现守护状态，右上角提供 46dp 靶区直达设置；常驻「打开领克App」主操作，底部仅收敛 3 个常用开关，工程排障与实时日志完全剥离至二级页。
+2. **独立二级设置页（SettingsActivity）与高级配置模块化**：
+   * 采用独立 Manifest 活动，涵盖**车辆蓝牙识别**、**充电保护偏好**、**后台保活自愈**及**诊断日志导出**四大卡片；
+   * 次级操作按钮浮动于 `surface-2` (`#272A29`) 之上，带 `1dp` 描边与水波纹，彻底解决暗黑模式下对比度不足的问题。
+3. **新车主使用前就绪自检清单（ReadinessSheet）**：
+   * 状态栏下方提供紧凑状态胶囊，直观展示「N 项未就绪」；
+   * 点击弹出原生 Paseo Dark 底部手势抽屉浮层，覆盖系统蓝牙、定位、通知监听、电池优化及车辆绑定等 10 项条件自动评估，支持一键自愈与精准跳转。
+4. **全新领克应用车标与通知栏原生优化**：
+   * **官方黑底车标**：提取自领克官方 App 经典纯白 “LYNK & CO” 排版，左上角融入 45° 翡翠绿主题数字钥匙，覆盖 `mdpi` 至 `xxxhdpi` 全量分辨率，并支持 Android 8.0+ Adaptive Icon 自适应规范；
+   * **通知栏注入 LargeIcon**：前台服务通知显式配置 `setLargeIcon` 与主题着色，使下拉通知面板同步展现高辨识度的全彩领克车标。
+5. **统一品牌文案与 Docker 编译增强**：
+   * 全面排查并根除代码、日志、前台通知及诊断包中遗留的“银河”字样，严格对齐 `GLOSSARY.md` 规范；
+   * 引入 `.gitattributes` 强制 Shell 脚本使用 LF 换行符，防止 Windows 环境下因 CRLF 换行导致 Docker 编译报错。
+
+---
+
+## 五、v4.3.2 历史更新（视觉重构 Paseo Dark 配色体系与发布版本规范化）
 
 本版本全面重构了应用视觉与设计系统，并规范了正式发布版本命名：
 
