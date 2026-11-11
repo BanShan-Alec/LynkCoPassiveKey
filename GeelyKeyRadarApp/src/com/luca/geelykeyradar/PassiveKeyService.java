@@ -22,6 +22,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.graphics.drawable.Icon;
 import android.hardware.Sensor;
 import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
@@ -2009,6 +2010,10 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         } else {
             builder = new Notification.Builder(this);
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            builder.setLargeIcon(Icon.createWithResource(this, R.drawable.ic_launcher));
+        }
+        builder.setColor(PaseoTheme.COLOR_PRIMARY);
         return builder
                 .setSmallIcon(R.drawable.ic_notification)
                 .setContentTitle("领克无感钥匙")
