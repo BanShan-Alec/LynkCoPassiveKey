@@ -330,13 +330,6 @@ public class MainActivity extends Activity {
                 }
 
                 @Override
-                public void onRepairNotification() {
-                    KeyNotificationBridgeService.ensureRebound(MainActivity.this);
-                    Toast.makeText(MainActivity.this, "已触发钥匙通道自愈重连，请稍候...", Toast.LENGTH_SHORT).show();
-                    refreshUi();
-                }
-
-                @Override
                 public void onRequestBatteryWhitelist() {
                     requestBatteryWhitelist();
                 }
@@ -383,11 +376,7 @@ public class MainActivity extends Activity {
             Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
             intent.setData(Uri.parse("package:" + getPackageName()));
             startActivity(intent);
-        } catch (Throwable t) {
-            try {
-                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
-            } catch (Throwable ignored) {
-            }
+        } catch (Throwable ignored) {
         }
     }
 
@@ -407,13 +396,14 @@ public class MainActivity extends Activity {
         boolean chargingProtected = status != null ? status.chargingLockBlocked : false;
         boolean geelyConnected = status != null ? status.geelyConnected : false;
 
+        VehicleIdentity fallbackSaved = null;
         if (status == null) {
             VehicleIdentityStore store = new VehicleIdentityStore(this);
-            VehicleIdentity saved = store.load();
-            if (saved != null) {
+            fallbackSaved = store.load();
+            if (fallbackSaved != null) {
                 identityLearned = true;
-                vehicleName = saved.name;
-                vehicleAddress = saved.address;
+                vehicleName = fallbackSaved.name;
+                vehicleAddress = fallbackSaved.address;
             }
             serviceEnabled = store.isServiceEnabled();
         }
@@ -457,9 +447,7 @@ public class MainActivity extends Activity {
             autoLockSwitch.setEnabled(status.serviceEnabled);
             settingSwitches = false;
         } else {
-            VehicleIdentityStore store = new VehicleIdentityStore(this);
-            VehicleIdentity saved = store.load();
-            titleVehicleNameView.setText(saved != null ? saved.name : "领克无感钥匙启动中");
+            titleVehicleNameView.setText(fallbackSaved != null ? fallbackSaved.name : "领克无感钥匙启动中");
             statusBadgeView.setText(snapshot.badgeText);
             statusBadgeView.setTextColor(snapshot.badgeColor);
         }

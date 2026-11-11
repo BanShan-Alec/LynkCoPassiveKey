@@ -95,7 +95,7 @@ public final class ReadinessModelTest {
         assert !snapshotConnected.batteryWhitelisted : "确认电池白名单为未加入";
         assert snapshotConnected.isFullyReady : "【关键决策】未加后台白名单绝不阻塞全面就绪！";
         assert "● 守护中".equals(snapshotConnected.badgeText) : "蓝牙已连通应展示正常守护中胶囊";
-        assert snapshotConnected.badgeColor == PaseoTheme.COLOR_SUCCESS : "正常守护展示 Paseo 成功绿";
+        assert snapshotConnected.badgeColor == PaseoTheme.COLOR_PRIMARY_TEXT : "正常守护展示 Paseo 薄荷绿 --paseo-primary-text";
 
         // 若当前未连上车辆，应展示正常的搜索中胶囊
         ReadinessModel.Snapshot snapshotScanning = model.evaluate(

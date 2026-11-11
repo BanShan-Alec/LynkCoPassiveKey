@@ -107,7 +107,7 @@ public final class ReadinessModel {
             badgeColor = PaseoTheme.COLOR_WARNING;
         } else if (geelyConnected) {
             badgeText = "● 守护中";
-            badgeColor = PaseoTheme.COLOR_SUCCESS;
+            badgeColor = PaseoTheme.COLOR_PRIMARY_TEXT;
         } else {
             badgeText = "● 搜索中";
             badgeColor = PaseoTheme.COLOR_INFO;

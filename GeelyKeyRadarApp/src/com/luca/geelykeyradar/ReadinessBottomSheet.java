@@ -9,6 +9,7 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.Window;
@@ -23,10 +24,11 @@ import java.util.Locale;
 /**
  * 新车主就绪度自检底部抽屉浮层 (ReadinessBottomSheet).
  * 遵循 Paseo Dark 设计规范（DESIGN.md）与 Refactoring UI 十二大系统阶梯：
- * 1. 采用标准 android.app.Dialog 实现底部停靠、全宽、暗黑遮罩与平滑滑出动效；
+ * 1. 采用标准 android.app.Dialog 实现底部停靠、全宽、0.65 遮罩与平滑滑出动效；
  * 2. 零外部 AndroidX / Material 依赖，保持轻量级原生构建；
- * 3. 结构化呈现 3 项必需（官方 App、核心权限、车辆自学习）与 1 项建议（后台高耗电白名单）；
- * 4. 对外暴露 update(Snapshot) 方法，支持在切回前台时原地增量更新视图与打勾状态。
+ * 3. 严格遵循 Paseo 字阶（20sp/16sp/14sp/12sp）与 46dp 最小触控靶区；
+ * 4. 结构化呈现 3 项必需（官方 App、核心权限、车辆自学习）与 1 项建议（后台高耗电白名单）；
+ * 5. 支持向下滑动手柄收起与原地增量更新打勾状态。
  */
 public class ReadinessBottomSheet extends Dialog {
 
@@ -34,7 +36,6 @@ public class ReadinessBottomSheet extends Dialog {
         void onOpenOfficialApp();
         void onRequestBluetooth();
         void onOpenNotificationSettings();
-        void onRepairNotification();
         void onRequestBatteryWhitelist();
     }
 
@@ -55,7 +56,6 @@ public class ReadinessBottomSheet extends Dialog {
     private TextView item2DescView;
     private Button item2BtButton;
     private Button item2NotifButton;
-    private Button item2RepairButton;
 
     // Item 3: 车辆自学习与车机设置
     private TextView item3IconView;
@@ -87,7 +87,7 @@ public class ReadinessBottomSheet extends Dialog {
             window.setGravity(Gravity.BOTTOM);
             window.setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
             window.addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-            window.setDimAmount(0.6f);
+            window.setDimAmount(0.65f); // DESIGN.md --paseo-bg-mask 0.65 不透明度
             window.setWindowAnimations(android.R.style.Animation_InputMethod);
         }
         setCanceledOnTouchOutside(true);
@@ -107,17 +107,17 @@ public class ReadinessBottomSheet extends Dialog {
     private void buildUi() {
         LinearLayout root = new LinearLayout(getContext());
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setPadding(dp(16), dp(10), dp(16), dp(20));
+        root.setPadding(dp(16), dp(10), dp(16), dp(16));
 
-        // Paseo Dark 容器底色 + 顶部 16dp 圆角 + 精细描边
+        // Paseo Dark 容器底色 + 顶部 12dp 圆角 + 精细描边
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(PaseoTheme.COLOR_CARD);
-        float r = dp(16);
+        float r = dp(PaseoTheme.RADIUS_CARD);
         bg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
         bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), PaseoTheme.COLOR_BORDER);
         root.setBackground(bg);
 
-        // 1. 顶部拖拽手柄 (Drag Handle)
+        // 1. 顶部拖拽手柄 (Drag Handle) - 支持点击或向下滑动收起抽屉
         View dragHandle = new View(getContext());
         GradientDrawable handleBg = new GradientDrawable();
         handleBg.setColor(PaseoTheme.COLOR_SURFACE_3);
@@ -125,10 +125,28 @@ public class ReadinessBottomSheet extends Dialog {
         dragHandle.setBackground(handleBg);
         LinearLayout.LayoutParams handleLp = new LinearLayout.LayoutParams(dp(40), dp(4));
         handleLp.gravity = Gravity.CENTER_HORIZONTAL;
-        handleLp.bottomMargin = dp(14);
+        handleLp.bottomMargin = dp(12);
+        dragHandle.setOnTouchListener(new View.OnTouchListener() {
+            private float startY;
+            @Override
+            public boolean onTouch(View v, MotionEvent event) {
+                switch (event.getAction()) {
+                    case MotionEvent.ACTION_DOWN:
+                        startY = event.getRawY();
+                        return true;
+                    case MotionEvent.ACTION_UP:
+                        if (event.getRawY() - startY > dp(20)) {
+                            dismiss();
+                            return true;
+                        }
+                        break;
+                }
+                return false;
+            }
+        });
         root.addView(dragHandle, handleLp);
 
-        // 2. 标题区与就绪度进度
+        // 2. 标题区与就绪度进度 (Paseo 字阶: heading-sm 20sp, caption 12sp)
         LinearLayout headerGroup = new LinearLayout(getContext());
         headerGroup.setOrientation(LinearLayout.VERTICAL);
         headerGroup.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -140,7 +158,7 @@ public class ReadinessBottomSheet extends Dialog {
 
         TextView titleView = new TextView(getContext());
         titleView.setText("新车主就绪清单");
-        titleView.setTextSize(18);
+        titleView.setTextSize(20);
         titleView.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         titleView.setTextColor(PaseoTheme.COLOR_TEXT);
         titleView.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -159,7 +177,7 @@ public class ReadinessBottomSheet extends Dialog {
         headerGroup.addView(subtitleProgressView, subLp);
         root.addView(headerGroup, headerLp);
 
-        // 3. 可滚动卡片容器 (Max height 65% of screen)
+        // 3. 可滚动卡片容器
         ScrollView scrollView = new ScrollView(getContext());
         scrollView.setFillViewport(true);
         LinearLayout itemsContainer = new LinearLayout(getContext());
@@ -168,7 +186,7 @@ public class ReadinessBottomSheet extends Dialog {
         // --- 卡片 1: 领克官方 App (必需) ---
         LinearLayout item1Card = itemCard();
         item1IconView = statusIcon();
-        item1TitleView = text("1. 领克官方 App", 15, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
+        item1TitleView = text("1. 领克官方 App", 16, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
         item1DescView = text("正在检测官方应用...", 12, PaseoTheme.COLOR_TEXT_SECONDARY, Typeface.NORMAL);
         item1Button = smallButton("打开领克 App", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
         item1Button.setOnClickListener(v -> {
@@ -182,7 +200,7 @@ public class ReadinessBottomSheet extends Dialog {
         // --- 卡片 2: 核心系统权限 (必需) ---
         LinearLayout item2Card = itemCard();
         item2IconView = statusIcon();
-        item2TitleView = text("2. 核心系统权限 (附近设备 + 通知监听)", 15, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
+        item2TitleView = text("2. 核心系统权限 (附近设备 + 通知监听)", 16, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
         item2DescView = text("附近设备扫描：检测中 | 通知监听：检测中", 12, PaseoTheme.COLOR_TEXT_SECONDARY, Typeface.NORMAL);
         
         LinearLayout item2BtnRow = new LinearLayout(getContext());
@@ -195,36 +213,31 @@ public class ReadinessBottomSheet extends Dialog {
         item2NotifButton.setOnClickListener(v -> {
             if (listener != null) listener.onOpenNotificationSettings();
         });
-        item2RepairButton = smallButton("⚡ 修复通道", PaseoTheme.COLOR_WARNING, PaseoTheme.COLOR_IDENTITY_INK);
-        item2RepairButton.setOnClickListener(v -> {
-            if (listener != null) listener.onRepairNotification();
-        });
 
-        LinearLayout.LayoutParams btnHalfLp = new LinearLayout.LayoutParams(0, dp(38), 1.0f);
-        btnHalfLp.rightMargin = dp(6);
+        LinearLayout.LayoutParams btnHalfLp = new LinearLayout.LayoutParams(0, dp(PaseoTheme.TARGET_MIN_DP), 1.0f);
+        btnHalfLp.rightMargin = dp(8);
         item2BtnRow.addView(item2BtButton, btnHalfLp);
-        item2BtnRow.addView(item2NotifButton, new LinearLayout.LayoutParams(0, dp(38), 1.0f));
+        item2BtnRow.addView(item2NotifButton, new LinearLayout.LayoutParams(0, dp(PaseoTheme.TARGET_MIN_DP), 1.0f));
 
         item2Card.addView(rowHeader(item2IconView, item2TitleView));
         item2Card.addView(item2DescView, itemDescLp());
         item2Card.addView(item2BtnRow, buttonLp());
-        item2Card.addView(item2RepairButton, buttonLp());
         itemsContainer.addView(item2Card, cardLp());
 
         // --- 卡片 3: 车辆自学习与车机设置 (必需) ---
         LinearLayout item3Card = itemCard();
         item3IconView = statusIcon();
-        item3TitleView = text("3. 车辆自学习与车机防冲突", 15, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
+        item3TitleView = text("3. 车辆自学习与车机防冲突", 16, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
         item3DescView = text("检测车辆绑定状态中...", 12, PaseoTheme.COLOR_TEXT_SECONDARY, Typeface.NORMAL);
 
         TextView carSettingTip = text(
                 "⚠️ 车机注意：中控屏设置 → 门锁与车窗，请务必彻底关闭「靠近解锁 / 离开上锁」，避免与手机逻辑冲突！",
                 12, PaseoTheme.COLOR_WARNING, Typeface.NORMAL
         );
-        carSettingTip.setPadding(dp(8), dp(6), dp(8), dp(6));
+        carSettingTip.setPadding(dp(8), dp(8), dp(8), dp(8));
         GradientDrawable tipBg = new GradientDrawable();
         tipBg.setColor(PaseoTheme.COLOR_WARNING_CONTAINER);
-        tipBg.setCornerRadius(dp(6));
+        tipBg.setCornerRadius(dp(PaseoTheme.RADIUS_INPUT));
         tipBg.setStroke(dp(1), PaseoTheme.COLOR_WARNING);
         carSettingTip.setBackground(tipBg);
 
@@ -242,7 +255,7 @@ public class ReadinessBottomSheet extends Dialog {
         // --- 卡片 4: 手机后台高耗电白名单 (建议/可选) ---
         LinearLayout item4Card = itemCard();
         item4IconView = statusIcon();
-        item4TitleView = text("4. 后台高耗电白名单 (建议 · 可选)", 15, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
+        item4TitleView = text("4. 后台高耗电白名单 (建议 · 可选)", 16, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
         item4DescView = text(
                 "此项为可选增强项，不阻塞使用。若熄屏较长时间后被系统休眠，建议允许后台高耗电以维持长效常驻。",
                 12, PaseoTheme.COLOR_TEXT_SECONDARY, Typeface.NORMAL
@@ -283,12 +296,14 @@ public class ReadinessBottomSheet extends Dialog {
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 dp(PaseoTheme.TARGET_MIN_DP)
         );
-        closeLp.topMargin = dp(12);
+        closeLp.topMargin = dp(8);
         root.addView(closeButton, closeLp);
 
+        int screenH = getContext().getResources().getDisplayMetrics().heightPixels;
+        int dialogH = Math.min((int) (screenH * 0.72f), dp(560));
         setContentView(root, new ViewGroup.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(520)
+                dialogH
         ));
     }
 
@@ -298,7 +313,7 @@ public class ReadinessBottomSheet extends Dialog {
         // 顶部总进度
         if (snapshot.isFullyReady) {
             subtitleProgressView.setText("✅ 必需项已全部达标（3/3）· 无感钥匙已就绪");
-            subtitleProgressView.setTextColor(PaseoTheme.COLOR_SUCCESS);
+            subtitleProgressView.setTextColor(PaseoTheme.COLOR_PRIMARY_TEXT);
         } else {
             subtitleProgressView.setText(String.format(Locale.ROOT,
                     "⚠️ 已完成 %d/%d 项必需配置 · 满足必需项即可正常使用",
@@ -324,7 +339,6 @@ public class ReadinessBottomSheet extends Dialog {
         // 2. 核心权限状态
         boolean btOk = snapshot.btScanGranted;
         boolean notifOk = snapshot.notifAccessGranted;
-        boolean notifConnected = snapshot.notifConnected;
 
         if (snapshot.corePermissionsGranted) {
             item2IconView.setText("✅");
@@ -334,12 +348,11 @@ public class ReadinessBottomSheet extends Dialog {
             item2BtButton.setText("蓝牙已授权");
             item2NotifButton.setEnabled(false);
             item2NotifButton.setText("通知已就绪");
-            item2RepairButton.setVisibility(View.GONE);
         } else {
             item2IconView.setText("⚠️");
             StringBuilder sb = new StringBuilder();
             sb.append("附近设备/蓝牙：").append(btOk ? "已授予" : "未授予 (无法扫描广播)").append("\n");
-            sb.append("通知监听：").append(notifOk ? (notifConnected ? "正常" : "已开启但未绑定 (假死)") : "未开启 (无法解闭锁)");
+            sb.append("通知监听：").append(notifOk ? "正常" : "未开启 (无法解闭锁)");
             item2DescView.setText(sb.toString());
             item2DescView.setTextColor(PaseoTheme.COLOR_IDENTITY_ORANGE);
 
@@ -347,13 +360,6 @@ public class ReadinessBottomSheet extends Dialog {
             item2BtButton.setText(btOk ? "蓝牙已授权" : "授予蓝牙权限");
             item2NotifButton.setEnabled(!notifOk);
             item2NotifButton.setText(notifOk ? "通知已开启" : "开启通知使用权");
-
-            // 若已开启但未连接（假死），显式高亮修复通道按钮
-            if (notifOk && !notifConnected) {
-                item2RepairButton.setVisibility(View.VISIBLE);
-            } else {
-                item2RepairButton.setVisibility(View.GONE);
-            }
         }
 
         // 3. 车辆自学习状态
@@ -395,7 +401,7 @@ public class ReadinessBottomSheet extends Dialog {
         layout.setPadding(pad, pad, pad, pad);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(PaseoTheme.COLOR_SURFACE_2);
-        bg.setCornerRadius(dp(8));
+        bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
         bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), PaseoTheme.COLOR_BORDER);
         layout.setBackground(bg);
         return layout;
@@ -453,7 +459,7 @@ public class ReadinessBottomSheet extends Dialog {
     private LinearLayout.LayoutParams buttonLp() {
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                dp(38)
+                dp(PaseoTheme.TARGET_MIN_DP)
         );
         lp.bottomMargin = dp(4);
         return lp;
@@ -463,11 +469,12 @@ public class ReadinessBottomSheet extends Dialog {
         Button button = new Button(getContext());
         button.setText(label);
         button.setAllCaps(false);
-        button.setTextSize(13);
+        button.setTextSize(14);
+        button.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         button.setTextColor(textColor);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(bgColor);
-        bg.setCornerRadius(dp(6));
+        bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
         button.setBackground(bg);
         return button;
     }
