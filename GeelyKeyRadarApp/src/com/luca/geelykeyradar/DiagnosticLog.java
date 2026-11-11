@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.Future;
 
-/** 主服务与通知/银河桥接共用的日志入口，观测失败不会中断车控。 */
+/** 主服务与通知/领克桥接共用的日志入口，观测失败不会中断车控。 */
 final class DiagnosticLog {
     private static volatile DiagnosticLogStore store;
     private static String environment = "environment=not_initialized";

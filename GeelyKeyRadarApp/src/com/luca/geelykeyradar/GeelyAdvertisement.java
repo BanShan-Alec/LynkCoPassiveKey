@@ -162,9 +162,9 @@ final class GeelyAdvertisement {
     }
 
     /**
-     * 传给银河 MiuiService 的非空 carId。
+     * 传给领克官方 App 的非空 carId。
      *
-     * 官方 MiuiService 只用它做日志/回执标识，真正鉴权使用 ScanResult 和吉利自己的钥匙配置；
+     * 官方 MiuiService 只用它做日志/回执标识，真正鉴权使用 ScanResult 和官方自己的钥匙配置；
      * 因此这里不需要、也不应该写死用户 VIN。
      */
     String carId() {

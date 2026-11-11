@@ -154,12 +154,12 @@ final class DiagnosticLogStore {
                          ZipOutputStream zip = new ZipOutputStream(output)) {
                         addText(zip, "summary.txt", "schema=1 exported_wall_ms=" + wallMs + " exported_mono_ms=" + monoMs
                                 + "\nsid=" + session + " pid=" + pid + "\n" + health() + "\n" + sanitizeLines(snapshot));
-                        addText(zip, "README.txt", "银河无感钥匙诊断包\n"
+                        addText(zip, "README.txt", "领克无感钥匙诊断包\n"
                                 + "events.log 是关键事件，diagnostic.log 是计数、采样和等待细节；每组按旧分段到新分段合并。\n"
                                 + "sid/pid 区分进程；mono_ms 比较同一次开机的耗时；墙钟可能因时间校准改变。\n"
                                 + "用 sid + trace_run + req_id 关联请求；SERVICE_BEGIN 的 previous_clean_stop=false 不能单独证明崩溃。\n"
                                 + "计数是累计(+本窗口新增)，dropped/io_errors 非零说明日志可能丢失；轮转不保证保留全部历史。\n"
-                                + "SENT 是交给银河，不是车锁执行回执；UNKNOWN 不能算成功或失败。\n"
+                                + "SENT 是交给领克官方 App，不是车锁执行回执；UNKNOWN 不能算成功或失败。\n"
                                 + "蓝牙地址/车辆名称已替换为本机指纹，不含账号、VIN、密钥、扫描原始数据或系统通知正文。\n");
                         addLogs(zip, "events.log", "passive_key.log", EVENT_FILES, EVENT_BYTES);
                         addLogs(zip, "diagnostic.log", "passive_key_diagnostic.log", DETAIL_FILES, DETAIL_BYTES);

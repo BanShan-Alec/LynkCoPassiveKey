@@ -30,7 +30,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 
 /**
- * 吉利银河通知栏桥接。
+ * 领克官方通知栏桥接。
  *
  * 极简版只保留两件事：
  * 1. 读取官方通知栏的“已连接/未连接”状态，用于判断蓝牙钥匙是否在线；
@@ -71,7 +71,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
     private static volatile String lastObservedParkStatus = "";
     private static volatile long lastObservedParkStatusAtMs = 0L;
     private static volatile String lastObservedLockHint = "";
-    private static volatile String lastButtonCaptureDiag = "等待解析吉利银河通知栏...";
+    private static volatile String lastButtonCaptureDiag = "等待解析领克通知栏...";
     private static volatile Boolean textConnectionHint = null;
     private static volatile String lastControlDiagnostic = "transport=NONE result=NONE";
     private static volatile String lastParseDiagnostic = "NO_NOTIFICATION";
@@ -272,7 +272,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
     }
 
     /**
-     * 点击银河通知的“解锁”按钮（id=5, notif_tv_unlock=0x7f0a10cb）。
+     * 点击领克通知的“解锁”按钮。
      * 旧版在这里挂起并在连接后自动发送；现在只返回本次发送结果，等待与取消由主服务统一处理。
      */
     public static ControlResult triggerUnlockViaNotification() {
@@ -281,7 +281,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
     }
 
     /**
-     * 点击银河通知的“上锁”按钮（id=5, notif_tv_lock=0x7f0a10c7），不创建第二套待发队列。
+     * 点击领克通知的“上锁”按钮，不创建第二套待发队列。
      */
     public static ControlResult triggerLockViaNotification() {
         if (isControlBlocked(false)) return controlResult(ControlResult.NOT_SENT, "NONE", "BLOCKED", null);
@@ -730,7 +730,7 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
             connVisible = textConnectionHint;
         }
         geelyBleConnected = Boolean.TRUE.equals(connVisible);
-        // 未连接时银河通知里的按钮不可点；清掉上一轮连接留下的 PendingIntent，
+        // 未连接时领克通知里的按钮不可点；清掉上一轮连接留下的 PendingIntent，
         // 让 triggerUnlock/triggerLock 走“先排队、连接后立刻点击”的路径，
         // 避免把解锁指令提前发给尚未完成 V2 鉴权的车机。
         if (!geelyBleConnected) {
