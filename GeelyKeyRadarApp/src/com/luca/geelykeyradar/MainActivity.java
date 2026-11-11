@@ -1,20 +1,25 @@
 package com.luca.geelykeyradar;
 
+import android.Manifest;
 import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.PowerManager;
+import android.provider.Settings;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -33,9 +38,12 @@ import java.util.Locale;
  * 遵循 Paseo Dark 设计规范（DESIGN.md）与 Refactoring UI 十二大系统阶梯：
  * 1. 以「走动冷暖雷达 (HotColdRadarView)」为视觉中心，呈现直观的距离色温与门锁态势；
  * 2. 状态微徽章呈现守护状态，右上角提供 46dp 设置靶区直达二级设置页；
- * 3. 常驻打开领克App快捷操作，底部仅保留常用动作开关，彻底去除工程噪音。
+ * 3. 顶栏胶囊支持 46dp 点击交互，可随时拉起「新车主就绪清单」底部抽屉浮层 (ReadinessBottomSheet)；
+ * 4. 常驻打开领克App快捷操作，底部仅保留常用动作开关，彻底去除工程噪音。
  */
 public class MainActivity extends Activity {
+
+    private static final int REQUEST_BT_PERMISSIONS = 2001;
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable refreshRunnable = new Runnable() {
@@ -45,6 +53,9 @@ public class MainActivity extends Activity {
             handler.postDelayed(this, 500L);
         }
     };
+
+    private final ReadinessModel readinessModel = new ReadinessModel();
+    private ReadinessBottomSheet readinessBottomSheet;
 
     private PassiveKeyService service;
     private boolean bound = false;
@@ -111,6 +122,18 @@ public class MainActivity extends Activity {
         super.onPause();
     }
 
+    @Override
+    protected void onDestroy() {
+        if (readinessBottomSheet != null && readinessBottomSheet.isShowing()) {
+            try {
+                readinessBottomSheet.dismiss();
+            } catch (Throwable ignored) {
+            }
+            readinessBottomSheet = null;
+        }
+        super.onDestroy();
+    }
+
     private void startPassiveKeyService() {
         try {
             Intent intent = new Intent(this, PassiveKeyService.class);
@@ -152,7 +175,7 @@ public class MainActivity extends Activity {
                 ScrollView.LayoutParams.WRAP_CONTENT
         ));
 
-        // --- 1. 顶栏：标题 + 状态胶囊徽章 + 46dp 设置齿轮按钮 ---
+        // --- 1. 顶栏：标题 + 状态胶囊徽章 (46dp 靶区支持点击查看就绪清单) + 46dp 设置齿轮按钮 ---
         LinearLayout headerBar = new LinearLayout(this);
         headerBar.setOrientation(LinearLayout.HORIZONTAL);
         headerBar.setGravity(Gravity.CENTER_VERTICAL);
@@ -182,18 +205,28 @@ public class MainActivity extends Activity {
         titleGroup.addView(titleVehicleNameView, subtitleLp);
         headerBar.addView(titleGroup, titleGroupLp);
 
-        // 状态徽章胶囊
+        // 状态徽章胶囊 (最小 46dp 靶区，可点击拉起就绪清单抽屉)
         statusBadgeView = new TextView(this);
         statusBadgeView.setText("● 守护中");
         statusBadgeView.setTextSize(12);
         statusBadgeView.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         statusBadgeView.setTextColor(PaseoTheme.COLOR_SUCCESS);
-        statusBadgeView.setPadding(dp(10), dp(4), dp(10), dp(4));
+        statusBadgeView.setGravity(Gravity.CENTER);
+        statusBadgeView.setMinHeight(dp(PaseoTheme.TARGET_MIN_DP));
+        statusBadgeView.setPadding(dp(12), dp(4), dp(12), dp(4));
         GradientDrawable badgeBg = new GradientDrawable();
         badgeBg.setColor(PaseoTheme.COLOR_SURFACE_2);
         badgeBg.setCornerRadius(dp(PaseoTheme.RADIUS_INPUT));
         badgeBg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), PaseoTheme.COLOR_BORDER);
-        statusBadgeView.setBackground(badgeBg);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            statusBadgeView.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22FFFFFF), badgeBg, null));
+        } else {
+            statusBadgeView.setBackground(badgeBg);
+        }
+        statusBadgeView.setClickable(true);
+        statusBadgeView.setFocusable(true);
+        statusBadgeView.setOnClickListener(v -> showReadinessBottomSheet());
+
         LinearLayout.LayoutParams badgeLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -223,10 +256,8 @@ public class MainActivity extends Activity {
         radarLp.bottomMargin = dp(PaseoTheme.MARGIN_CARD_BOTTOM);
         root.addView(radarView, radarLp);
 
-        // --- 3. 常驻主操作按钮：打开领克App ---
+        // --- 3. 常驻主操作按钮：打开领克 App ---
         openOfficialAppButton = button("打开领克App", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
-        openOfficialAppButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_launch, 0, 0, 0);
-        openOfficialAppButton.setCompoundDrawablePadding(dp(8));
         openOfficialAppButton.setOnClickListener(v -> launchOfficialApp());
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -273,9 +304,134 @@ public class MainActivity extends Activity {
         setContentView(scrollView);
     }
 
+    private void showReadinessBottomSheet() {
+        if (isFinishing() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed())) {
+            return;
+        }
+        if (readinessBottomSheet == null) {
+            readinessBottomSheet = new ReadinessBottomSheet(this, new ReadinessBottomSheet.OnActionListener() {
+                @Override
+                public void onOpenOfficialApp() {
+                    launchOfficialApp();
+                }
+
+                @Override
+                public void onRequestBluetooth() {
+                    requestBluetoothPermissions();
+                }
+
+                @Override
+                public void onOpenNotificationSettings() {
+                    try {
+                        startActivity(new Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS));
+                    } catch (Throwable t) {
+                        Toast.makeText(MainActivity.this, "请在系统设置中找到并开启通知使用权", Toast.LENGTH_SHORT).show();
+                    }
+                }
+
+                @Override
+                public void onRepairNotification() {
+                    KeyNotificationBridgeService.ensureRebound(MainActivity.this);
+                    Toast.makeText(MainActivity.this, "已触发钥匙通道自愈重连，请稍候...", Toast.LENGTH_SHORT).show();
+                    refreshUi();
+                }
+
+                @Override
+                public void onRequestBatteryWhitelist() {
+                    requestBatteryWhitelist();
+                }
+            });
+        }
+        refreshUi();
+        if (!readinessBottomSheet.isShowing()) {
+            readinessBottomSheet.show();
+        }
+    }
+
+    private boolean hasBluetoothPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            return checkSelfPermission(Manifest.permission.BLUETOOTH_SCAN) == PackageManager.PERMISSION_GRANTED
+                    && checkSelfPermission(Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED;
+        }
+        return checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED;
+    }
+
+    private void requestBluetoothPermissions() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            requestPermissions(new String[]{
+                    Manifest.permission.BLUETOOTH_SCAN,
+                    Manifest.permission.BLUETOOTH_CONNECT
+            }, REQUEST_BT_PERMISSIONS);
+        } else {
+            requestPermissions(new String[]{
+                    Manifest.permission.ACCESS_FINE_LOCATION
+            }, REQUEST_BT_PERMISSIONS);
+        }
+    }
+
+    private boolean isBatteryWhitelisted() {
+        try {
+            PowerManager powerManager = (PowerManager) getSystemService(Context.POWER_SERVICE);
+            return powerManager != null && powerManager.isIgnoringBatteryOptimizations(getPackageName());
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void requestBatteryWhitelist() {
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS);
+            intent.setData(Uri.parse("package:" + getPackageName()));
+            startActivity(intent);
+        } catch (Throwable t) {
+            try {
+                startActivity(new Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS));
+            } catch (Throwable ignored) {
+            }
+        }
+    }
+
     private void refreshUi() {
         PassiveKeyService.Status status = service != null ? service.getStatus() : null;
         boolean geelyInstalled = GeelyBridge.isGeelyInstalled(this);
+        boolean btScanGranted = hasBluetoothPermissions();
+        boolean notifAccessGranted = KeyNotificationBridgeService.isNotificationListenerEnabled(this);
+        boolean notifConnected = KeyNotificationBridgeService.isListenerConnected();
+        boolean batteryWhitelisted = isBatteryWhitelisted();
+
+        boolean identityLearned = status != null ? status.identityLearned : false;
+        String vehicleName = status != null ? status.vehicleName : "";
+        String vehicleAddress = status != null ? status.vehicleAddress : "";
+        boolean serviceEnabled = status != null ? status.serviceEnabled : true;
+        boolean bluetoothOn = status != null ? status.bluetoothOn : true;
+        boolean chargingProtected = status != null ? status.chargingLockBlocked : false;
+        boolean geelyConnected = status != null ? status.geelyConnected : false;
+
+        if (status == null) {
+            VehicleIdentityStore store = new VehicleIdentityStore(this);
+            VehicleIdentity saved = store.load();
+            if (saved != null) {
+                identityLearned = true;
+                vehicleName = saved.name;
+                vehicleAddress = saved.address;
+            }
+            serviceEnabled = store.isServiceEnabled();
+        }
+
+        ReadinessModel.Snapshot snapshot = readinessModel.evaluate(
+                geelyInstalled,
+                btScanGranted,
+                notifAccessGranted,
+                notifConnected,
+                identityLearned,
+                vehicleName,
+                vehicleAddress,
+                batteryWhitelisted,
+                bluetoothOn,
+                serviceEnabled,
+                chargingProtected,
+                geelyConnected
+        );
 
         // 同步雷达视图
         if (radarView != null) {
@@ -287,25 +443,11 @@ public class MainActivity extends Activity {
             if (status.identityLearned) {
                 titleVehicleNameView.setText(status.vehicleName.isEmpty() ? "已识别本车蓝牙" : status.vehicleName);
             } else {
-                titleVehicleNameView.setText("未绑定本车 · 请先用领克 App 连接");
+                titleVehicleNameView.setText("未绑定本车 · 点击右上胶囊查看就绪清单");
             }
 
-            if (!status.serviceEnabled) {
-                statusBadgeView.setText("● 已暂停");
-                statusBadgeView.setTextColor(PaseoTheme.COLOR_TEXT_TERTIARY);
-            } else if (!status.bluetoothOn) {
-                statusBadgeView.setText("● 蓝牙未开");
-                statusBadgeView.setTextColor(PaseoTheme.COLOR_ERROR);
-            } else if (status.chargingLockBlocked) {
-                statusBadgeView.setText("● 充电保护");
-                statusBadgeView.setTextColor(PaseoTheme.COLOR_WARNING);
-            } else if (status.geelyConnected) {
-                statusBadgeView.setText("● 守护中");
-                statusBadgeView.setTextColor(PaseoTheme.COLOR_SUCCESS);
-            } else {
-                statusBadgeView.setText("● 搜索中");
-                statusBadgeView.setTextColor(PaseoTheme.COLOR_INFO);
-            }
+            statusBadgeView.setText(snapshot.badgeText);
+            statusBadgeView.setTextColor(snapshot.badgeColor);
 
             settingSwitches = true;
             serviceMasterSwitch.setChecked(status.serviceEnabled);
@@ -318,8 +460,13 @@ public class MainActivity extends Activity {
             VehicleIdentityStore store = new VehicleIdentityStore(this);
             VehicleIdentity saved = store.load();
             titleVehicleNameView.setText(saved != null ? saved.name : "领克无感钥匙启动中");
-            statusBadgeView.setText("● 服务启动中");
-            statusBadgeView.setTextColor(PaseoTheme.COLOR_TEXT_SECONDARY);
+            statusBadgeView.setText(snapshot.badgeText);
+            statusBadgeView.setTextColor(snapshot.badgeColor);
+        }
+
+        // 抽屉展开时增量更新打勾状态
+        if (readinessBottomSheet != null && readinessBottomSheet.isShowing()) {
+            readinessBottomSheet.update(snapshot);
         }
 
         // 更新常驻官方应用按钮状态
