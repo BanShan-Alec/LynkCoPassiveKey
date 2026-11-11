@@ -11,6 +11,7 @@ import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
@@ -21,6 +22,9 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
+import android.text.style.ImageSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -253,10 +257,9 @@ public class SettingsActivity extends Activity {
         permissionStatusView = text("", 14, PaseoTheme.COLOR_TEXT, Typeface.NORMAL);
         keepAliveCard.addView(permissionStatusView, bodyLp());
 
-        // 核心自愈按钮：Primary 主题绿色呈现，配以原生矢量刷新图标
+        // 核心自愈按钮：Primary 主题绿色呈现，配以原生矢量刷新图标并保持图标文字整体居中
         repairNotificationButton = button("一键修复钥匙通道", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
-        repairNotificationButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_refresh, 0, 0, 0);
-        repairNotificationButton.setCompoundDrawablePadding(dp(8));
+        setButtonCenteredIcon(repairNotificationButton, R.drawable.ic_refresh, "一键修复钥匙通道");
         repairNotificationButton.setOnClickListener(v -> {
             KeyNotificationBridgeService.ensureRebound(SettingsActivity.this);
             Toast.makeText(SettingsActivity.this, "已触发钥匙通道自愈重连，请等待 1-3 秒...", Toast.LENGTH_SHORT).show();
@@ -659,6 +662,34 @@ public class SettingsActivity extends Activity {
             button.setBackground(bg);
         }
         return button;
+    }
+
+    private void setButtonCenteredIcon(Button button, int iconRes, String label) {
+        if (button == null) return;
+        button.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+        button.setCompoundDrawablePadding(0);
+        button.setAllCaps(false);
+        if (iconRes == 0) {
+            button.setText(label);
+            return;
+        }
+        Drawable drawable = getDrawable(iconRes);
+        if (drawable == null) {
+            button.setText(label);
+            return;
+        }
+        drawable = drawable.mutate();
+        int size = dp(18);
+        drawable.setBounds(0, 0, size, size);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            drawable.setTint(button.getCurrentTextColor());
+        }
+        SpannableStringBuilder ssb = new SpannableStringBuilder("  " + label);
+        ImageSpan span = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                ? new ImageSpan(drawable, ImageSpan.ALIGN_CENTER)
+                : new ImageSpan(drawable, ImageSpan.ALIGN_BOTTOM);
+        ssb.setSpan(span, 0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        button.setText(ssb);
     }
 
     private LinearLayout.LayoutParams buttonLp() {

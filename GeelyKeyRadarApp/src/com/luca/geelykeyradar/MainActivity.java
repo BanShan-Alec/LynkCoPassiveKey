@@ -10,6 +10,7 @@ import android.content.pm.PackageManager;
 import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.net.Uri;
@@ -20,6 +21,9 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.provider.Settings;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
+import android.text.style.ImageSpan;
 import android.view.Gravity;
 import android.view.View;
 import android.widget.Button;
@@ -38,7 +42,7 @@ import java.util.Locale;
  * 遵循 Paseo Dark 设计规范（DESIGN.md）与 Refactoring UI 十二大系统阶梯：
  * 1. 以「走动冷暖雷达 (HotColdRadarView)」为视觉中心，呈现直观的距离色温与门锁态势；
  * 2. 状态微徽章呈现守护状态，右上角提供 46dp 设置靶区直达二级设置页；
- * 3. 顶栏胶囊支持 46dp 点击交互，可随时拉起「新车主就绪清单」底部抽屉浮层 (ReadinessBottomSheet)；
+ * 3. 顶栏胶囊支持 46dp 点击交互，可随时拉起「钥匙就绪自检」底部抽屉浮层 (ReadinessBottomSheet)；
  * 4. 常驻打开领克App快捷操作，底部仅保留常用动作开关，彻底去除工程噪音。
  */
 public class MainActivity extends Activity {
@@ -258,6 +262,7 @@ public class MainActivity extends Activity {
 
         // --- 3. 常驻主操作按钮：打开领克 App ---
         openOfficialAppButton = button("打开领克App", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
+        setButtonCenteredIcon(openOfficialAppButton, R.drawable.ic_launch, "打开领克App");
         openOfficialAppButton.setOnClickListener(v -> launchOfficialApp());
         LinearLayout.LayoutParams btnLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -433,7 +438,7 @@ public class MainActivity extends Activity {
             if (status.identityLearned) {
                 titleVehicleNameView.setText(status.vehicleName.isEmpty() ? "已识别本车蓝牙" : status.vehicleName);
             } else {
-                titleVehicleNameView.setText("未绑定本车 · 点击右上胶囊查看就绪清单");
+                titleVehicleNameView.setText("未绑定本车 · 点击右上胶囊查看就绪自检");
             }
 
             statusBadgeView.setText(snapshot.badgeText);
@@ -469,8 +474,7 @@ public class MainActivity extends Activity {
         if (openOfficialAppButton == null) return;
         if (!installed) {
             openOfficialAppButton.setEnabled(false);
-            openOfficialAppButton.setText("未安装领克官方 App");
-            openOfficialAppButton.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+            setButtonCenteredIcon(openOfficialAppButton, 0, "未安装领克官方 App");
             GradientDrawable bg = new GradientDrawable();
             bg.setColor(PaseoTheme.COLOR_SURFACE_4);
             bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
@@ -479,9 +483,6 @@ public class MainActivity extends Activity {
             return;
         }
         openOfficialAppButton.setEnabled(true);
-        openOfficialAppButton.setText("打开领克App");
-        openOfficialAppButton.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_launch, 0, 0, 0);
-        openOfficialAppButton.setCompoundDrawablePadding(dp(8));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(PaseoTheme.COLOR_PRIMARY);
         bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
@@ -491,6 +492,35 @@ public class MainActivity extends Activity {
             openOfficialAppButton.setBackground(bg);
         }
         openOfficialAppButton.setTextColor(PaseoTheme.COLOR_TEXT);
+        setButtonCenteredIcon(openOfficialAppButton, R.drawable.ic_launch, "打开领克App");
+    }
+
+    private void setButtonCenteredIcon(Button button, int iconRes, String label) {
+        if (button == null) return;
+        button.setCompoundDrawablesWithIntrinsicBounds(0, 0, 0, 0);
+        button.setCompoundDrawablePadding(0);
+        button.setAllCaps(false);
+        if (iconRes == 0) {
+            button.setText(label);
+            return;
+        }
+        Drawable drawable = getDrawable(iconRes);
+        if (drawable == null) {
+            button.setText(label);
+            return;
+        }
+        drawable = drawable.mutate();
+        int size = dp(18);
+        drawable.setBounds(0, 0, size, size);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            drawable.setTint(button.getCurrentTextColor());
+        }
+        SpannableStringBuilder ssb = new SpannableStringBuilder("  " + label);
+        ImageSpan span = (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q)
+                ? new ImageSpan(drawable, ImageSpan.ALIGN_CENTER)
+                : new ImageSpan(drawable, ImageSpan.ALIGN_BOTTOM);
+        ssb.setSpan(span, 0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+        button.setText(ssb);
     }
 
     private void launchOfficialApp() {

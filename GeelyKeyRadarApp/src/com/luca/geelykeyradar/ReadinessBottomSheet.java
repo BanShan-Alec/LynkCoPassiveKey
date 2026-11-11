@@ -7,6 +7,8 @@ import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.RippleDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -22,13 +24,15 @@ import android.widget.TextView;
 import java.util.Locale;
 
 /**
- * 新车主就绪度自检底部抽屉浮层 (ReadinessBottomSheet).
+ * 钥匙就绪自检底部抽屉浮层 (ReadinessBottomSheet).
  * 遵循 Paseo Dark 设计规范（DESIGN.md）与 Refactoring UI 十二大系统阶梯：
  * 1. 采用标准 android.app.Dialog 实现底部停靠、全宽、0.65 遮罩与平滑滑出动效；
  * 2. 零外部 AndroidX / Material 依赖，保持轻量级原生构建；
  * 3. 严格遵循 Paseo 字阶（20sp/16sp/14sp/12sp）与 46dp 最小触控靶区；
- * 4. 结构化呈现 3 项必需（官方 App、核心权限、车辆自学习）与 1 项建议（后台高耗电白名单）；
- * 5. 支持向下滑动手柄收起与原地增量更新打勾状态。
+ * 4. 表面阶梯清晰：抽屉底色 surface-0 (#181B1A) -> 卡片 surface-1 (#1E2120) -> 按钮 surface-2 (#272A29 带 #3D4643 描边)；
+ * 5. 全面遵循零 Emoji 规范，采用纯净状态圆点 (●) 与明确语义色；
+ * 6. 结构化呈现 3 项必需（官方 App、核心权限、车辆自学习）与 1 项建议（后台高耗电白名单）；
+ * 7. 支持向下滑动手柄收起与原地增量更新状态。
  */
 public class ReadinessBottomSheet extends Dialog {
 
@@ -109,9 +113,9 @@ public class ReadinessBottomSheet extends Dialog {
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(10), dp(16), dp(16));
 
-        // Paseo Dark 容器底色 + 顶部 12dp 圆角 + 精细描边
+        // Paseo Dark 容器底色 (#181B1A) + 顶部 12dp 圆角 + 精细描边 (#252B2A)
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(PaseoTheme.COLOR_CARD);
+        bg.setColor(PaseoTheme.COLOR_BG);
         float r = dp(PaseoTheme.RADIUS_CARD);
         bg.setCornerRadii(new float[]{r, r, r, r, 0, 0, 0, 0});
         bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), PaseoTheme.COLOR_BORDER);
@@ -157,7 +161,7 @@ public class ReadinessBottomSheet extends Dialog {
         headerLp.bottomMargin = dp(16);
 
         TextView titleView = new TextView(getContext());
-        titleView.setText("新车主就绪清单");
+        titleView.setText("钥匙就绪自检");
         titleView.setTextSize(20);
         titleView.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
         titleView.setTextColor(PaseoTheme.COLOR_TEXT);
@@ -188,7 +192,7 @@ public class ReadinessBottomSheet extends Dialog {
         item1IconView = statusIcon();
         item1TitleView = text("1. 领克官方 App", 16, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
         item1DescView = text("正在检测官方应用...", 12, PaseoTheme.COLOR_TEXT_SECONDARY, Typeface.NORMAL);
-        item1Button = smallButton("打开领克 App", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
+        item1Button = smallButton("打开领克 App", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
         item1Button.setOnClickListener(v -> {
             if (listener != null) listener.onOpenOfficialApp();
         });
@@ -202,7 +206,7 @@ public class ReadinessBottomSheet extends Dialog {
         item2IconView = statusIcon();
         item2TitleView = text("2. 核心系统权限 (附近设备 + 通知监听)", 16, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
         item2DescView = text("附近设备扫描：检测中 | 通知监听：检测中", 12, PaseoTheme.COLOR_TEXT_SECONDARY, Typeface.NORMAL);
-        
+
         LinearLayout item2BtnRow = new LinearLayout(getContext());
         item2BtnRow.setOrientation(LinearLayout.HORIZONTAL);
         item2BtButton = smallButton("授予蓝牙权限", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
@@ -227,21 +231,21 @@ public class ReadinessBottomSheet extends Dialog {
         // --- 卡片 3: 车辆自学习与车机设置 (必需) ---
         LinearLayout item3Card = itemCard();
         item3IconView = statusIcon();
-        item3TitleView = text("3. 车辆自学习与车机防冲突", 16, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
+        item3TitleView = text("3. 车辆自学习与车机设置", 16, PaseoTheme.COLOR_TEXT, Typeface.BOLD);
         item3DescView = text("检测车辆绑定状态中...", 12, PaseoTheme.COLOR_TEXT_SECONDARY, Typeface.NORMAL);
 
         TextView carSettingTip = text(
-                "⚠️ 车机注意：中控屏设置 → 门锁与车窗，请务必彻底关闭「靠近解锁 / 离开上锁」，避免与手机逻辑冲突！",
-                12, PaseoTheme.COLOR_WARNING, Typeface.NORMAL
+                "车机设置建议：中控屏设置 → 车辆控制-门窗，建议关闭「靠近解锁 / 离开上锁」，避免与手机并发导致重复上锁/解锁。",
+                12, PaseoTheme.COLOR_WARNING_TEXT, Typeface.NORMAL
         );
-        carSettingTip.setPadding(dp(8), dp(8), dp(8), dp(8));
+        carSettingTip.setPadding(dp(10), dp(8), dp(10), dp(8));
         GradientDrawable tipBg = new GradientDrawable();
         tipBg.setColor(PaseoTheme.COLOR_WARNING_CONTAINER);
         tipBg.setCornerRadius(dp(PaseoTheme.RADIUS_INPUT));
         tipBg.setStroke(dp(1), PaseoTheme.COLOR_WARNING);
         carSettingTip.setBackground(tipBg);
 
-        item3Button = smallButton("去车旁打开领克 App 连车", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
+        item3Button = smallButton("去车旁打开领克 App 连车", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
         item3Button.setOnClickListener(v -> {
             if (listener != null) listener.onOpenOfficialApp();
         });
@@ -282,7 +286,7 @@ public class ReadinessBottomSheet extends Dialog {
 
         // 4. 底部确定/关闭按钮 (46dp 触控靶区)
         Button closeButton = new Button(getContext());
-        closeButton.setText("我知道了 · 关闭清单");
+        closeButton.setText("我知道了 · 关闭自检");
         closeButton.setAllCaps(false);
         closeButton.setTextSize(14);
         closeButton.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
@@ -290,7 +294,11 @@ public class ReadinessBottomSheet extends Dialog {
         GradientDrawable closeBg = new GradientDrawable();
         closeBg.setColor(PaseoTheme.COLOR_PRIMARY);
         closeBg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
-        closeButton.setBackground(closeBg);
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            closeButton.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22FFFFFF), closeBg, null));
+        } else {
+            closeButton.setBackground(closeBg);
+        }
         closeButton.setOnClickListener(v -> dismiss());
         LinearLayout.LayoutParams closeLp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -310,30 +318,30 @@ public class ReadinessBottomSheet extends Dialog {
     private void applySnapshot(ReadinessModel.Snapshot snapshot) {
         if (subtitleProgressView == null || snapshot == null) return;
 
-        // 顶部总进度
+        // 顶部总进度 (零 Emoji，Paseo 语义色)
         if (snapshot.isFullyReady) {
-            subtitleProgressView.setText("✅ 必需项已全部达标（3/3）· 无感钥匙已就绪");
+            subtitleProgressView.setText("必需项已全部达标（3/3）· 无感钥匙已就绪");
             subtitleProgressView.setTextColor(PaseoTheme.COLOR_PRIMARY_TEXT);
         } else {
             subtitleProgressView.setText(String.format(Locale.ROOT,
-                    "⚠️ 已完成 %d/%d 项必需配置 · 满足必需项即可正常使用",
+                    "已完成 %d/%d 项必需配置 · 满足必需项即可正常使用",
                     snapshot.requiredCompleted, snapshot.requiredTotal));
             subtitleProgressView.setTextColor(PaseoTheme.COLOR_IDENTITY_ORANGE);
         }
 
         // 1. 官方 App 状态
         if (snapshot.officialAppInstalled) {
-            item1IconView.setText("✅");
+            item1IconView.setText("●");
+            item1IconView.setTextColor(PaseoTheme.COLOR_PRIMARY_TEXT);
             item1DescView.setText("已安装领克官方 App，前台钥匙通道支持就绪。");
             item1DescView.setTextColor(PaseoTheme.COLOR_TEXT_SECONDARY);
-            item1Button.setText("打开领克 App");
-            item1Button.setEnabled(true);
+            setButtonState(item1Button, true, "打开领克 App", true);
         } else {
-            item1IconView.setText("❌");
+            item1IconView.setText("●");
+            item1IconView.setTextColor(PaseoTheme.COLOR_ERROR);
             item1DescView.setText("未安装领克官方 App！本应用依赖官方钥匙鉴权通道，请先在应用商店安装。");
             item1DescView.setTextColor(PaseoTheme.COLOR_ERROR);
-            item1Button.setText("未检测到应用");
-            item1Button.setEnabled(false);
+            setButtonState(item1Button, false, "未检测到应用", false);
         }
 
         // 2. 核心权限状态
@@ -341,68 +349,68 @@ public class ReadinessBottomSheet extends Dialog {
         boolean notifOk = snapshot.notifAccessGranted;
 
         if (snapshot.corePermissionsGranted) {
-            item2IconView.setText("✅");
+            item2IconView.setText("●");
+            item2IconView.setTextColor(PaseoTheme.COLOR_PRIMARY_TEXT);
             item2DescView.setText("附近设备/蓝牙权限：已授予\n通知监听权限：正常就绪");
             item2DescView.setTextColor(PaseoTheme.COLOR_TEXT_SECONDARY);
-            item2BtButton.setEnabled(false);
-            item2BtButton.setText("蓝牙已授权");
-            item2NotifButton.setEnabled(false);
-            item2NotifButton.setText("通知已就绪");
+            setButtonState(item2BtButton, false, "蓝牙已授权", false);
+            setButtonState(item2NotifButton, false, "通知已就绪", false);
         } else {
-            item2IconView.setText("⚠️");
+            item2IconView.setText("●");
+            item2IconView.setTextColor(PaseoTheme.COLOR_IDENTITY_ORANGE);
             StringBuilder sb = new StringBuilder();
             sb.append("附近设备/蓝牙：").append(btOk ? "已授予" : "未授予 (无法扫描广播)").append("\n");
             sb.append("通知监听：").append(notifOk ? "正常" : "未开启 (无法解闭锁)");
             item2DescView.setText(sb.toString());
             item2DescView.setTextColor(PaseoTheme.COLOR_IDENTITY_ORANGE);
 
-            item2BtButton.setEnabled(!btOk);
-            item2BtButton.setText(btOk ? "蓝牙已授权" : "授予蓝牙权限");
-            item2NotifButton.setEnabled(!notifOk);
-            item2NotifButton.setText(notifOk ? "通知已开启" : "开启通知使用权");
+            setButtonState(item2BtButton, !btOk, btOk ? "蓝牙已授权" : "授予蓝牙权限", false);
+            setButtonState(item2NotifButton, !notifOk, notifOk ? "通知已开启" : "开启通知使用权", false);
         }
 
         // 3. 车辆自学习状态
         if (snapshot.vehicleLearned) {
-            item3IconView.setText("✅");
+            item3IconView.setText("●");
+            item3IconView.setTextColor(PaseoTheme.COLOR_PRIMARY_TEXT);
             item3DescView.setText(String.format(Locale.ROOT,
                     "已绑定车辆：%s\n蓝牙物理特征：%s",
                     snapshot.vehicleName.isEmpty() ? "领克爱车" : snapshot.vehicleName,
                     snapshot.vehicleAddress.isEmpty() ? "--" : snapshot.vehicleAddress));
             item3DescView.setTextColor(PaseoTheme.COLOR_TEXT_SECONDARY);
-            item3Button.setText("重新学习车辆 (去车旁)");
+            setButtonState(item3Button, true, "重新学习车辆 (去车旁)", false);
         } else {
-            item3IconView.setText("⚠️");
+            item3IconView.setText("●");
+            item3IconView.setTextColor(PaseoTheme.COLOR_IDENTITY_ORANGE);
             item3DescView.setText("尚未识别到本车蓝牙身份。\n请带手机到车旁，打开官方 App 连一次车，本应用将自动捕获并记住。");
             item3DescView.setTextColor(PaseoTheme.COLOR_IDENTITY_ORANGE);
-            item3Button.setText("去车旁打开领克连车");
+            setButtonState(item3Button, true, "去车旁打开领克连车", true);
         }
 
         // 4. 后台高耗电白名单 (建议/可选)
         if (snapshot.batteryWhitelisted) {
-            item4IconView.setText("✅");
+            item4IconView.setText("●");
+            item4IconView.setTextColor(PaseoTheme.COLOR_PRIMARY_TEXT);
             item4DescView.setText("已加入系统电池优化白名单，息屏常驻受保护。");
             item4DescView.setTextColor(PaseoTheme.COLOR_TEXT_SECONDARY);
-            item4Button.setText("已设为允许");
-            item4Button.setEnabled(false);
+            setButtonState(item4Button, false, "已设为允许", false);
         } else {
-            item4IconView.setText("💡");
+            item4IconView.setText("●");
+            item4IconView.setTextColor(PaseoTheme.COLOR_TEXT_TERTIARY);
             item4DescView.setText("未加入电池白名单（可选项，不阻断使用）。若锁屏较长时间后感应变慢或休眠，建议设为允许。");
             item4DescView.setTextColor(PaseoTheme.COLOR_TEXT_SECONDARY);
-            item4Button.setText("加入电池白名单");
-            item4Button.setEnabled(true);
+            setButtonState(item4Button, true, "加入电池白名单", false);
         }
     }
 
     private LinearLayout itemCard() {
         LinearLayout layout = new LinearLayout(getContext());
         layout.setOrientation(LinearLayout.VERTICAL);
-        int pad = dp(12);
+        int pad = dp(14);
         layout.setPadding(pad, pad, pad, pad);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(PaseoTheme.COLOR_SURFACE_2);
-        bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
-        bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), PaseoTheme.COLOR_BORDER);
+        bg.setColor(PaseoTheme.COLOR_CARD); // #1E2120
+        bg.setCornerRadius(dp(PaseoTheme.RADIUS_CARD)); // 12dp
+        bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), PaseoTheme.COLOR_BORDER); // #252B2A
         layout.setBackground(bg);
         return layout;
     }
@@ -432,8 +440,9 @@ public class ReadinessBottomSheet extends Dialog {
 
     private TextView statusIcon() {
         TextView icon = new TextView(getContext());
-        icon.setText("⚪");
+        icon.setText("●");
         icon.setTextSize(14);
+        icon.setTextColor(PaseoTheme.COLOR_TEXT_TERTIARY);
         return icon;
     }
 
@@ -469,14 +478,47 @@ public class ReadinessBottomSheet extends Dialog {
         Button button = new Button(getContext());
         button.setText(label);
         button.setAllCaps(false);
-        button.setTextSize(14);
+        button.setTextSize(13);
         button.setTypeface(Typeface.create(Typeface.DEFAULT, Typeface.BOLD));
+        setButtonState(button, true, label, bgColor == PaseoTheme.COLOR_PRIMARY);
+        return button;
+    }
+
+    private void setButtonState(Button button, boolean enabled, String label, boolean isPrimary) {
+        if (button == null) return;
+        button.setEnabled(enabled);
+        button.setText(label);
+        int bgColor;
+        int textColor;
+        if (!enabled) {
+            bgColor = 0xFF222524;
+            textColor = PaseoTheme.COLOR_TEXT_TERTIARY;
+        } else if (isPrimary) {
+            bgColor = PaseoTheme.COLOR_PRIMARY;
+            textColor = PaseoTheme.COLOR_TEXT;
+        } else {
+            bgColor = PaseoTheme.COLOR_SURFACE_2;
+            textColor = PaseoTheme.COLOR_TEXT;
+        }
         button.setTextColor(textColor);
+
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(bgColor);
-        bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
-        button.setBackground(bg);
-        return button;
+        bg.setCornerRadius(dp(PaseoTheme.RADIUS_INPUT));
+        if (!enabled) {
+            bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), 0xFF2A2E2D);
+        } else if (isPrimary) {
+            bg.setStroke(0, 0);
+        } else {
+            bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), 0xFF3D4643);
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            int rippleColor = enabled ? 0x22FFFFFF : 0;
+            button.setBackground(new RippleDrawable(ColorStateList.valueOf(rippleColor), bg, null));
+        } else {
+            button.setBackground(bg);
+        }
     }
 
     private int dp(int value) {

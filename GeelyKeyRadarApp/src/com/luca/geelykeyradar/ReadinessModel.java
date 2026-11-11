@@ -3,7 +3,7 @@ package com.luca.geelykeyradar;
 import java.util.Locale;
 
 /**
- * 新车主就绪度自检评估器 (ReadinessModel).
+ * 钥匙就绪自检评估器 (ReadinessModel).
  * 纯逻辑层：聚合各项系统探针状态，判定 3 项必需与 1 项建议的就绪度及胶囊文案。
  * 遵循纯 Java 设计，可在 JVM 单元测试中 100% 覆盖。
  */

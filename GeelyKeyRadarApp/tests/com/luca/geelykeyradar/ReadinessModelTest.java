@@ -1,7 +1,7 @@
 package com.luca.geelykeyradar;
 
 /**
- * 验证新车主使用前就绪自检评估器 (ReadinessModel) 的判定规则。
+ * 验证钥匙就绪自检评估器 (ReadinessModel) 的判定规则。
  * 核心验证：
  * 1. 3 项必需（官方 App、核心系统权限、车辆自学习）与 1 项建议（后台白名单）的解耦；
  * 2. 关键业务决策：未开启后台保活白名单绝对不阻塞全面就绪 (isFullyReady == true)；
