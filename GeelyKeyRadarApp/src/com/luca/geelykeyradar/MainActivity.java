@@ -20,6 +20,8 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PowerManager;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.provider.Settings;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
@@ -70,6 +72,8 @@ public class MainActivity extends Activity {
     private TextView statusBadgeView;
     private ImageView settingsButton;
     private HotColdRadarView radarView;
+    private Button quickUnlockButton;
+    private Button quickLockButton;
     private Button openOfficialAppButton;
     private Switch serviceMasterSwitch;
     private Switch autoUnlockSwitch;
@@ -259,6 +263,33 @@ public class MainActivity extends Activity {
         );
         radarLp.bottomMargin = dp(PaseoTheme.MARGIN_CARD_BOTTOM);
         root.addView(radarView, radarLp);
+
+        // --- 2.5 快捷车控按钮组（【解锁】与【上锁】双按钮） ---
+        LinearLayout quickControlRow = new LinearLayout(this);
+        quickControlRow.setOrientation(LinearLayout.HORIZONTAL);
+
+        quickUnlockButton = button("解锁", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
+        setButtonCenteredIcon(quickUnlockButton, R.drawable.ic_unlock, "解锁");
+        quickUnlockButton.setOnClickListener(v -> performQuickUnlock());
+
+        quickLockButton = button("上锁", PaseoTheme.COLOR_SURFACE_2, PaseoTheme.COLOR_TEXT);
+        setButtonCenteredIcon(quickLockButton, R.drawable.ic_lock, "上锁");
+        quickLockButton.setOnClickListener(v -> performQuickLock());
+
+        LinearLayout.LayoutParams unlockLp = new LinearLayout.LayoutParams(0, dp(PaseoTheme.TARGET_MIN_DP), 1f);
+        unlockLp.rightMargin = dp(6);
+        quickControlRow.addView(quickUnlockButton, unlockLp);
+
+        LinearLayout.LayoutParams lockLp = new LinearLayout.LayoutParams(0, dp(PaseoTheme.TARGET_MIN_DP), 1f);
+        lockLp.leftMargin = dp(6);
+        quickControlRow.addView(quickLockButton, lockLp);
+
+        LinearLayout.LayoutParams quickRowLp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+        );
+        quickRowLp.bottomMargin = dp(PaseoTheme.MARGIN_CARD_BOTTOM);
+        root.addView(quickControlRow, quickRowLp);
 
         // --- 3. 常驻主操作按钮：打开领克 App ---
         openOfficialAppButton = button("打开领克App", PaseoTheme.COLOR_PRIMARY, PaseoTheme.COLOR_TEXT);
@@ -468,6 +499,55 @@ public class MainActivity extends Activity {
                 status != null ? status.geelyConnected : KeyNotificationBridgeService.isGeelyBleConnected(),
                 KeyNotificationBridgeService.isGeelyNotificationPresent()
         );
+
+        // 同步快捷车控按钮可用性（官方钥匙已连接且具备通知通道时激活，未连接置灰）
+        boolean canControl = (status != null ? status.geelyConnected : KeyNotificationBridgeService.isGeelyBleConnected())
+                && KeyNotificationBridgeService.isNotificationListenerEnabled(this);
+        if (quickUnlockButton != null && quickLockButton != null) {
+            quickUnlockButton.setEnabled(canControl);
+            quickUnlockButton.setAlpha(canControl ? 1.0f : 0.4f);
+            quickLockButton.setEnabled(canControl);
+            quickLockButton.setAlpha(canControl ? 1.0f : 0.4f);
+        }
+    }
+
+    private void performQuickUnlock() {
+        triggerHapticFeedback();
+        KeyNotificationBridgeService.ControlResult result =
+                KeyNotificationBridgeService.triggerUnlockViaNotification();
+        if (result == KeyNotificationBridgeService.ControlResult.SENT) {
+            Toast.makeText(this, "✓ 解锁指令已下发", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "官方钥匙未就绪，请稍候", Toast.LENGTH_SHORT).show();
+        }
+        refreshUi();
+    }
+
+    private void performQuickLock() {
+        triggerHapticFeedback();
+        KeyNotificationBridgeService.ControlResult result =
+                KeyNotificationBridgeService.triggerLockViaNotification();
+        if (result == KeyNotificationBridgeService.ControlResult.SENT) {
+            if (service != null) service.reportManualLocked();
+            Toast.makeText(this, "✓ 上锁指令已下发（走远不再重复闭锁）", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(this, "官方钥匙未就绪，请稍候", Toast.LENGTH_SHORT).show();
+        }
+        refreshUi();
+    }
+
+    private void triggerHapticFeedback() {
+        try {
+            Vibrator vibrator = (Vibrator) getSystemService(Context.VIBRATOR_SERVICE);
+            if (vibrator != null && vibrator.hasVibrator()) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    vibrator.vibrate(VibrationEffect.createOneShot(30L, VibrationEffect.DEFAULT_AMPLITUDE));
+                } else {
+                    vibrator.vibrate(30L);
+                }
+            }
+        } catch (Throwable ignored) {
+        }
     }
 
     private void updateOfficialAppButton(boolean installed, boolean connected, boolean notificationPresent) {
@@ -578,6 +658,9 @@ public class MainActivity extends Activity {
         button.setTextColor(textColor);
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(bgColor);
+        if (bgColor == PaseoTheme.COLOR_SURFACE_2) {
+            bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), 0xFF3D4643);
+        }
         bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
             button.setBackground(new RippleDrawable(ColorStateList.valueOf(0x22FFFFFF), bg, null));
