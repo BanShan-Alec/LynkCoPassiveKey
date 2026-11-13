@@ -10,7 +10,7 @@
 - 用户安装 App、用银河官方 App 连接一次车辆后，本 App 自动识别本车蓝牙身份；
 - 保留原包名 `com.luca.geelykeyradar`，升级安装后通知监听授权可以继续沿用。
 
-当前版本：`v4.4.1 / versionCode 107`。v4.4.1 针对日常验收体验优化按钮图标居中、钥匙就绪自检对比度重塑、零 Emoji 规范与领克车机官方层级路径，v4.4.0 引入走动冷暖雷达 HUD、钥匙就绪自检清单与全新领克车标，v4.3.2 重构 Paseo Dark 视觉设计配色规范并规范版本号（去除 -mini 历史后缀），v4.3.1 自愈与防死锁重构见 README，靠近阶段误锁修复见 [40_v4_0_3_approach_relock_guard.md](40_v4_0_3_approach_relock_guard.md)，日志与导出见 [39_v4_0_2_diagnostic_logs.md](39_v4_0_2_diagnostic_logs.md)，响应与防重复优化见 [38_v4_0_1_response_and_control_safety.md](38_v4_0_1_response_and_control_safety.md)，故障取证保留在 [37_20261107_slow_unlock_missed_lock_diagnosis.md](37_20261107_slow_unlock_missed_lock_diagnosis.md)。
+当前版本：`v4.5.0 / versionCode 108`。v4.5.0 重构离开上锁与防重复锁闭环逻辑、新增主页快捷【解锁】与【上锁】双按钮、重塑冷暖雷达离开驻留倒计时文案，v4.4.1 针对日常验收体验优化按钮图标居中、钥匙就绪自检对比度重塑、零 Emoji 规范与领克车机官方层级路径，v4.4.0 引入走动冷暖雷达 HUD、钥匙就绪自检清单与全新领克车标，v4.3.2 重构 Paseo Dark 视觉设计配色规范并规范版本号（去除 -mini 历史后缀），v4.3.1 自愈与防死锁重构见 README，靠近阶段误锁修复见 [40_v4_0_3_approach_relock_guard.md](40_v4_0_3_approach_relock_guard.md)，日志与导出见 [39_v4_0_2_diagnostic_logs.md](39_v4_0_2_diagnostic_logs.md)，响应与防重复优化见 [38_v4_0_1_response_and_control_safety.md](38_v4_0_1_response_and_control_safety.md)，故障取证保留在 [37_20261107_slow_unlock_missed_lock_diagnosis.md](37_20261107_slow_unlock_missed_lock_diagnosis.md)。
 
 ---
 
