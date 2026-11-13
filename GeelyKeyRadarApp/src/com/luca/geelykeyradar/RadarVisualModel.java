@@ -109,8 +109,8 @@ public final class RadarVisualModel {
 
         wasHot = false;
 
-        // 离开与锁车优先级高于机械靠近
-        if (sessionLocked && rssi <= lockDbm) {
+        // 离开与锁车优先级高于机械靠近：已闭锁且未达到近场解锁线，稳定保持闭锁展示
+        if (sessionLocked) {
             return new State(
                     TemperatureState.COLD,
                     PaseoTheme.COLOR_INFO,
@@ -136,19 +136,7 @@ public final class RadarVisualModel {
             );
         }
 
-        if (rssi <= lockDbm) {
-            return new State(
-                    TemperatureState.COLD,
-                    PaseoTheme.COLOR_INFO,
-                    PaseoTheme.COLOR_INFO_CONTAINER,
-                    PULSE_SLOW_MS,
-                    false,
-                    "正在远离爱车...",
-                    "实时 " + rssi + " dBm · 上锁门限 " + formatDbm(lockDbm)
-            );
-        }
-
-        if (rssi >= -84) {
+        if (rssi > lockDbm) {
             // 中场渐温逼近
             return new State(
                     TemperatureState.WARM,
@@ -161,7 +149,7 @@ public final class RadarVisualModel {
             );
         }
 
-        // 远场深蓝
+        // 远场深蓝静态展示（无驻留进行时）
         return new State(
                 TemperatureState.COLD,
                 PaseoTheme.COLOR_INFO,
@@ -169,7 +157,7 @@ public final class RadarVisualModel {
                 PULSE_SLOW_MS,
                 false,
                 "距离爱车较远",
-                "实时 " + rssi + " dBm · 门限 " + formatDbm(unlockDbm)
+                "实时 " + rssi + " dBm · 门限 " + formatDbm(lockDbm)
         );
     }
 

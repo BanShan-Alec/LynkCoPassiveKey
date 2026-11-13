@@ -526,6 +526,27 @@ final class PassiveKeyLogic {
         lastControlFeedback = "MANUAL_LOCKED";
     }
 
+    /**
+     * 用户手动在界面解锁、或检测到外部已解锁车时调用：
+     * 重置闭锁保护与会话计数，并激活离车上锁防线，保证车主后续走开时能正常触发自动上锁。
+     */
+    synchronized void onManualUnlocked(long nowMs) {
+        pendingAction = Action.NONE;
+        returnConfirmationRequired = false;
+        unlockRequests = 0;
+        lockRequests = 0;
+        controlRetryAfterMs = 0L;
+        earlyUnlockSentAtMs = 0L;
+        earlyApproachPeakDbm = Float.NaN;
+        approachLatched = true;
+        hasBeenNear = true;
+        departureArmed = true;
+        farSinceMs = 0L;
+        resetLockDwell();
+        resetReturnConfirmation();
+        lastControlFeedback = "MANUAL_UNLOCKED";
+    }
+
     /** 发送失败或条件失效时撤销待发标记，保留近车证据，并限制同一会话的补发次数。 */
     synchronized void onControlFailed(Action action, long nowMs) {
         onControlFailed(action, nowMs, true);

@@ -26,9 +26,14 @@ public final class RadarVisualModelTest {
 
     private static void testLockedCompletedState() {
         RadarVisualModel model = new RadarVisualModel();
-        // 上锁已完成离开态
-        RadarVisualModel.State s = model.evaluate(true, true, true, -88, false, -75f, -82f, 0L, 4500L, true);
-        assert "已离开车辆 · 门锁已闭锁".equals(s.statusText) : "闭锁完成后必须显示「已离开车辆 · 门锁已闭锁」，实际为：" + s.statusText;
+        // 1. 上锁已完成远场态
+        RadarVisualModel.State s1 = model.evaluate(true, true, true, -88, false, -75f, -82f, 0L, 4500L, true);
+        assert "已离开车辆 · 门锁已闭锁".equals(s1.statusText) : "闭锁完成后必须显示「已离开车辆 · 门锁已闭锁」，实际为：" + s1.statusText;
+
+        // 2. 闭锁后信号轻微回弹（例如 -80 dBm，高于 lockDbm 但低于 unlockDbm），仍必须稳定显示闭锁态
+        RadarVisualModel.State s2 = model.evaluate(true, true, true, -80, false, -75f, -82f, 0L, 4500L, true);
+        assert "已离开车辆 · 门锁已闭锁".equals(s2.statusText) : "闭锁后信号回弹仍须稳定显示「已离开车辆 · 门锁已闭锁」，实际为：" + s2.statusText;
+        assert s2.temperature == RadarVisualModel.TemperatureState.COLD;
     }
 
     private static void testDisconnected() {
@@ -45,10 +50,11 @@ public final class RadarVisualModelTest {
     private static void testColdFarField() {
         RadarVisualModel model = new RadarVisualModel();
         RadarVisualModel.State s = model.evaluate(true, true, true, -90, false, -75f, -82f);
-        assert s.temperature == RadarVisualModel.TemperatureState.COLD : "低于 -84dBm 应为深蓝冷场";
+        assert s.temperature == RadarVisualModel.TemperatureState.COLD : "低于 lockDbm 应为深蓝冷场";
         assert s.primaryColor == PaseoTheme.COLOR_INFO;
         assert s.pulseDurationMs == RadarVisualModel.PULSE_SLOW_MS;
         assert !s.triggerHaptic;
+        assert "距离爱车较远".equals(s.statusText) : "无驻留倒计时的静态远场必须显示「距离爱车较远」，实际为：" + s.statusText;
     }
 
     private static void testWarmApproaching() {

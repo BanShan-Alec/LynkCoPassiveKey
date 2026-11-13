@@ -277,11 +277,11 @@ public class MainActivity extends Activity {
         quickLockButton.setOnClickListener(v -> performQuickLock());
 
         LinearLayout.LayoutParams unlockLp = new LinearLayout.LayoutParams(0, dp(PaseoTheme.TARGET_MIN_DP), 1f);
-        unlockLp.rightMargin = dp(6);
+        unlockLp.rightMargin = dp(PaseoTheme.SPACING_COMPACT);
         quickControlRow.addView(quickUnlockButton, unlockLp);
 
         LinearLayout.LayoutParams lockLp = new LinearLayout.LayoutParams(0, dp(PaseoTheme.TARGET_MIN_DP), 1f);
-        lockLp.leftMargin = dp(6);
+        lockLp.leftMargin = dp(PaseoTheme.SPACING_COMPACT);
         quickControlRow.addView(quickLockButton, lockLp);
 
         LinearLayout.LayoutParams quickRowLp = new LinearLayout.LayoutParams(
@@ -512,24 +512,27 @@ public class MainActivity extends Activity {
     }
 
     private void performQuickUnlock() {
-        triggerHapticFeedback();
-        KeyNotificationBridgeService.ControlResult result =
-                KeyNotificationBridgeService.triggerUnlockViaNotification();
-        if (result == KeyNotificationBridgeService.ControlResult.SENT) {
-            Toast.makeText(this, "✓ 解锁指令已下发", Toast.LENGTH_SHORT).show();
-        } else {
-            Toast.makeText(this, "官方钥匙未就绪，请稍候", Toast.LENGTH_SHORT).show();
-        }
-        refreshUi();
+        performQuickControl(true);
     }
 
     private void performQuickLock() {
+        performQuickControl(false);
+    }
+
+    private void performQuickControl(boolean isUnlock) {
         triggerHapticFeedback();
-        KeyNotificationBridgeService.ControlResult result =
-                KeyNotificationBridgeService.triggerLockViaNotification();
+        KeyNotificationBridgeService.ControlResult result = isUnlock
+                ? KeyNotificationBridgeService.triggerUnlockViaNotification()
+                : KeyNotificationBridgeService.triggerLockViaNotification();
         if (result == KeyNotificationBridgeService.ControlResult.SENT) {
-            if (service != null) service.reportManualLocked();
-            Toast.makeText(this, "✓ 上锁指令已下发（走远不再重复闭锁）", Toast.LENGTH_SHORT).show();
+            if (service != null) {
+                if (isUnlock) {
+                    service.reportManualUnlocked();
+                } else {
+                    service.reportManualLocked();
+                }
+            }
+            Toast.makeText(this, isUnlock ? "✓ 解锁指令已下发" : "✓ 上锁指令已下发（走远不再重复闭锁）", Toast.LENGTH_SHORT).show();
         } else {
             Toast.makeText(this, "官方钥匙未就绪，请稍候", Toast.LENGTH_SHORT).show();
         }
@@ -659,7 +662,7 @@ public class MainActivity extends Activity {
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(bgColor);
         if (bgColor == PaseoTheme.COLOR_SURFACE_2) {
-            bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), 0xFF3D4643);
+            bg.setStroke(dp(PaseoTheme.BORDER_WIDTH_DP), PaseoTheme.COLOR_BORDER_STRONG);
         }
         bg.setCornerRadius(dp(PaseoTheme.RADIUS_BUTTON));
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {

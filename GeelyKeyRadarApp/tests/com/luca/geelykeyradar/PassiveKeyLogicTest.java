@@ -43,6 +43,7 @@ public final class PassiveKeyLogicTest {
         officialConnectedLocksEvenWithoutPriorNear();
         disconnectedSilenceNeverLocksWithoutNear();
         manualLockSuppressesDuplicateLock();
+        manualUnlockArmsDepartureAndAllowsAutoLock();
         System.out.println("PassiveKeyLogicTest passed");
     }
 
@@ -89,6 +90,32 @@ public final class PassiveKeyLogicTest {
                 "上锁完成后不得再次重复上锁");
         check(logic.onSample(-88f, 15_000L, true, false, true, true) == PassiveKeyLogic.Action.NONE,
                 "信号持续衰减也不得重复上锁");
+    }
+
+    /** 手动解锁清除闭锁保护，并激活离车上锁防线，后续离车满驻留应自动触发锁车。 */
+    private static void manualUnlockArmsDepartureAndAllowsAutoLock() {
+        PassiveKeyLogic logic = new PassiveKeyLogic();
+        // 初始手动上锁
+        logic.onManualLocked(1_000L);
+        check(logic.isSessionLocked(), "手动上锁后应为已闭锁状态");
+        // 远场不重复锁
+        check(logic.onSample(-86f, 2_000L, true, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "已闭锁状态下不得重复锁车");
+
+        // 车主在 App 手动点击解锁
+        logic.onManualUnlocked(3_000L);
+        check(!logic.isSessionLocked(), "手动解锁后 sessionLocked 应为 false");
+        check(logic.isApproachLatched(), "手动解锁后 approachLatched 应该为 true 防止重复解锁");
+
+        // 车主离开，信号衰减至 -86 dBm (<= lockDbm)
+        long lockAt = feedUntilLock(logic, 3_500L);
+        check(lockAt >= 8_000L, "手动解锁后离车驻留满 4.5s 必须自动触发上锁！");
+
+        // 成功上锁后完成状态机闭环
+        logic.onControlSent(PassiveKeyLogic.Action.LOCK, lockAt);
+        check(logic.isSessionLocked(), "自动锁车完成后恢复已闭锁状态");
+        check(logic.onSample(-86f, 10_000L, true, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "锁车完成后不再重复锁车");
     }
 
     /** 一次接近完成解锁后，不因持续近场而重复下发。 */

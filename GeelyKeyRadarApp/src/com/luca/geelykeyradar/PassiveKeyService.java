@@ -461,6 +461,18 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         updateNotificationIfNeeded(true);
     }
 
+    /** 车主手动解锁或外部确认已解锁后调用：重置闭锁会话并激活离开上锁防线。 */
+    public void reportManualUnlocked() {
+        long now = SystemClock.elapsedRealtime();
+        if (pendingControl.getAction() == PassiveKeyLogic.Action.UNLOCK) {
+            cancelPendingControl("已确认手动解锁");
+        }
+        logic.onManualUnlocked(now);
+        lastAction = "已手动解锁（离车将自动上锁）";
+        appendLog("✓ 已手动/外部确认解锁，重置闭锁标记并激活离车上锁");
+        updateNotificationIfNeeded(true);
+    }
+
     /**
      * 有线充电禁止自动上锁开关（USB/AC 有线充电时视为在车内，禁止自动上锁）。
      */
@@ -1351,12 +1363,17 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         boolean connected = isOfficialConnected();
         long now = SystemClock.elapsedRealtime();
         if (connected != geelyConnected) onGeelyConnectionChanged(connected, now);
-        String lockHint = KeyNotificationBridgeService.getLastObservedLockHint();
+        String lockHint = KeyNotificationBridgeService.consumeLastObservedLockHint();
         if ("LOCKED".equals(lockHint)) {
             if (pendingControl.getAction() == PassiveKeyLogic.Action.LOCK) {
                 cancelPendingControl("官方通知显示已上锁");
             }
             logic.onManualLocked(now);
+        } else if ("UNLOCKED".equals(lockHint)) {
+            if (pendingControl.getAction() == PassiveKeyLogic.Action.UNLOCK) {
+                cancelPendingControl("官方通知显示已解锁");
+            }
+            logic.onManualUnlocked(now);
         }
         processPendingControl(true);
     }
