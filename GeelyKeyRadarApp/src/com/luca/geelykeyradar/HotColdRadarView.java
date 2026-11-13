@@ -118,7 +118,10 @@ public class HotColdRadarView extends View {
                 status.rssi,
                 status.chargingLockBlocked,
                 status.unlockDbm,
-                status.lockDbm
+                status.lockDbm,
+                status.lockDwellElapsedMs,
+                status.lockDwellMs,
+                status.sessionLocked
         );
         updateFromModel(state);
     }

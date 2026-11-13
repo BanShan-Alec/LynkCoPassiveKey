@@ -208,6 +208,8 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         public float unlockDbm;
         public float lockDbm;
         public long lockDwellMs;
+        public long lockDwellElapsedMs = 0L;
+        public boolean sessionLocked = false;
         public int rssi = -127;
         public int unlockCount;
         public int lockCount;
@@ -379,6 +381,9 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         status.unlockDbm = unlockDbm;
         status.lockDbm = lockDbm;
         status.lockDwellMs = lockDwellMs;
+        long dwellStart = logic.getLockDwellStartMs();
+        status.lockDwellElapsedMs = (dwellStart > 0L && signalFresh) ? Math.max(0L, now - dwellStart) : 0L;
+        status.sessionLocked = logic.isSessionLocked();
         status.rssi = signalFresh ? lastRawRssi : -127;
         status.unlockCount = unlockCount;
         status.lockCount = lockCount;
@@ -442,6 +447,30 @@ public class PassiveKeyService extends Service implements SensorEventListener {
             cancelPendingControl("远离自动上锁已关闭");
         }
         appendLog("远离自动上锁: " + (enabled ? "开" : "关"));
+    }
+
+    /** 车主手动上锁或外部确认已锁后调用：收敛状态机为已锁闭，走远不再重复触发闭锁。 */
+    public void reportManualLocked() {
+        long now = SystemClock.elapsedRealtime();
+        if (pendingControl.getAction() == PassiveKeyLogic.Action.LOCK) {
+            cancelPendingControl("已确认手动上锁");
+        }
+        logic.onManualLocked(now);
+        lastAction = "已确认上锁（走远不再重复闭锁）";
+        appendLog("✓ 已手动/外部确认上锁，离开闭锁会话已闭环");
+        updateNotificationIfNeeded(true);
+    }
+
+    /** 车主手动解锁或外部确认已解锁后调用：重置闭锁会话并激活离开上锁防线。 */
+    public void reportManualUnlocked() {
+        long now = SystemClock.elapsedRealtime();
+        if (pendingControl.getAction() == PassiveKeyLogic.Action.UNLOCK) {
+            cancelPendingControl("已确认手动解锁");
+        }
+        logic.onManualUnlocked(now);
+        lastAction = "已手动解锁（离车将自动上锁）";
+        appendLog("✓ 已手动/外部确认解锁，重置闭锁标记并激活离车上锁");
+        updateNotificationIfNeeded(true);
     }
 
     /**
@@ -1334,6 +1363,18 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         boolean connected = isOfficialConnected();
         long now = SystemClock.elapsedRealtime();
         if (connected != geelyConnected) onGeelyConnectionChanged(connected, now);
+        String lockHint = KeyNotificationBridgeService.consumeLastObservedLockHint();
+        if ("LOCKED".equals(lockHint)) {
+            if (pendingControl.getAction() == PassiveKeyLogic.Action.LOCK) {
+                cancelPendingControl("官方通知显示已上锁");
+            }
+            logic.onManualLocked(now);
+        } else if ("UNLOCKED".equals(lockHint)) {
+            if (pendingControl.getAction() == PassiveKeyLogic.Action.UNLOCK) {
+                cancelPendingControl("官方通知显示已解锁");
+            }
+            logic.onManualUnlocked(now);
+        }
         processPendingControl(true);
     }
 

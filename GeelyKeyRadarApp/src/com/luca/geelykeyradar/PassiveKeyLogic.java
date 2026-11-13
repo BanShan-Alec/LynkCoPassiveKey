@@ -229,6 +229,13 @@ final class PassiveKeyLogic {
         }
 
         if (distanceDbm <= lockDbm) {
+            // 若官方蓝牙已连接且非失败后要求返回：官方蓝牙握手成功即证明处于现场会话。
+            // 此时即便是冷启动或未采到近场强信号，也必须激活离开上锁判定，坚决杜绝走远漏锁。
+            if (!hasBeenNear && officialConnected && !returnConfirmationRequired) {
+                hasBeenNear = true;
+                departureArmed = true;
+            }
+
             // 冷启动就在远处，或本次会话从未接近过车辆：不要凭空补一条上锁指令。
             if (!hasBeenNear) {
                 resetLockDwell();
@@ -502,6 +509,44 @@ final class PassiveKeyLogic {
         }
     }
 
+    /**
+     * 用户手动在界面上锁、或检测到外部已锁车时调用：
+     * 立即将状态机收敛为已锁闭离开态，重置驻留与待发动作，防止后续远场继续重复发锁。
+     */
+    synchronized void onManualLocked(long nowMs) {
+        pendingAction = Action.NONE;
+        approachLatched = false;
+        hasBeenNear = false;
+        farSinceMs = 0L;
+        lastUnlockAtMs = nowMs;
+        resetLockDwell();
+        returnConfirmationRequired = true;
+        resetReturnConfirmation();
+        resetDepartureEvidence();
+        lastControlFeedback = "MANUAL_LOCKED";
+    }
+
+    /**
+     * 用户手动在界面解锁、或检测到外部已解锁车时调用：
+     * 重置闭锁保护与会话计数，并激活离车上锁防线，保证车主后续走开时能正常触发自动上锁。
+     */
+    synchronized void onManualUnlocked(long nowMs) {
+        pendingAction = Action.NONE;
+        returnConfirmationRequired = false;
+        unlockRequests = 0;
+        lockRequests = 0;
+        controlRetryAfterMs = 0L;
+        earlyUnlockSentAtMs = 0L;
+        earlyApproachPeakDbm = Float.NaN;
+        approachLatched = true;
+        hasBeenNear = true;
+        departureArmed = true;
+        farSinceMs = 0L;
+        resetLockDwell();
+        resetReturnConfirmation();
+        lastControlFeedback = "MANUAL_UNLOCKED";
+    }
+
     /** 发送失败或条件失效时撤销待发标记，保留近车证据，并限制同一会话的补发次数。 */
     synchronized void onControlFailed(Action action, long nowMs) {
         onControlFailed(action, nowMs, true);
@@ -594,6 +639,11 @@ final class PassiveKeyLogic {
     /** 返回最后一个有效样本时间。 */
     synchronized long getLastSampleAtMs() {
         return lastSampleAtMs;
+    }
+
+    /** 返回当前是否处于上锁完成后的离开闭锁态。 */
+    synchronized boolean isSessionLocked() {
+        return returnConfirmationRequired;
     }
 
     /** 返回持续远场的起始时间。 */

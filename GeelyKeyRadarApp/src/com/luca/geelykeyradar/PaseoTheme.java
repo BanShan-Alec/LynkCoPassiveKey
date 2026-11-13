@@ -17,6 +17,7 @@ public final class PaseoTheme {
     public static final int COLOR_SURFACE_4 = 0xFF595B5B;   // --paseo-surface-4 (muted controls)
     public static final int COLOR_BORDER = 0xFF252B2A;      // --paseo-border
     public static final int COLOR_BORDER_SECONDARY = 0xFF2F3534; // --paseo-border-secondary
+    public static final int COLOR_BORDER_STRONG = 0xFF3D4643;    // --paseo-border-strong (次级按钮/高强调描边)
 
     // --- 4.2 品牌主色阶 (Paseo Primary Ramp) ---
     public static final int COLOR_PRIMARY = 0xFF20744A;        // --paseo-primary

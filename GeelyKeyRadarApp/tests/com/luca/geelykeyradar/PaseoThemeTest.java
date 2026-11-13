@@ -22,6 +22,7 @@ public class PaseoThemeTest {
         assert PaseoTheme.COLOR_SURFACE_3 == 0xFF434645 : "surface-3 must be #434645";
         assert PaseoTheme.COLOR_SURFACE_4 == 0xFF595B5B : "surface-4 must be #595B5B";
         assert PaseoTheme.COLOR_BORDER == 0xFF252B2A : "border must be #252B2A";
+        assert PaseoTheme.COLOR_BORDER_STRONG == 0xFF3D4643 : "border strong must be #3D4643";
     }
 
     private static void testPrimaryRamp() {

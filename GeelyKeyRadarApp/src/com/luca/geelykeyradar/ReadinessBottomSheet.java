@@ -235,7 +235,7 @@ public class ReadinessBottomSheet extends Dialog {
         item3DescView = text("检测车辆绑定状态中...", 12, PaseoTheme.COLOR_TEXT_SECONDARY, Typeface.NORMAL);
 
         TextView carSettingTip = text(
-                "车机设置建议：中控屏设置 → 车辆控制-门窗，建议关闭「靠近解锁 / 离开上锁」，避免与手机并发导致重复上锁/解锁。",
+                "★ 车机设置强烈建议：进入中控屏设置 → 车辆控制-门窗，请务必关闭「靠近解锁 / 离开上锁」两项原厂开关！彻底避免车端硬件与手机通知栏并发导致车锁重复解闭锁与误锁。",
                 12, PaseoTheme.COLOR_WARNING_TEXT, Typeface.NORMAL
         );
         carSettingTip.setPadding(dp(10), dp(8), dp(10), dp(8));

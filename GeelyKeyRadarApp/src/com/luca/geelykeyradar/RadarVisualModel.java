@@ -24,7 +24,7 @@ public final class RadarVisualModel {
     private boolean wasHot = false;
 
     /**
-     * 计算当前状态下的雷达视觉与触觉输出。
+     * 计算当前状态下的雷达视觉与触觉输出（向后兼容重载）。
      */
     public State evaluate(
             boolean serviceEnabled,
@@ -34,6 +34,25 @@ public final class RadarVisualModel {
             boolean chargingProtected,
             float unlockDbm,
             float lockDbm
+    ) {
+        return evaluate(serviceEnabled, bluetoothOn, geelyConnected, rssi, chargingProtected,
+                unlockDbm, lockDbm, 0L, 4500L, false);
+    }
+
+    /**
+     * 计算当前状态下的雷达视觉与触觉输出（全量阶段状态版）。
+     */
+    public State evaluate(
+            boolean serviceEnabled,
+            boolean bluetoothOn,
+            boolean geelyConnected,
+            int rssi,
+            boolean chargingProtected,
+            float unlockDbm,
+            float lockDbm,
+            long dwellElapsedMs,
+            long lockDwellMs,
+            boolean sessionLocked
     ) {
         if (!serviceEnabled || !bluetoothOn) {
             wasHot = false;
@@ -69,8 +88,8 @@ public final class RadarVisualModel {
                     PaseoTheme.COLOR_SURFACE_2,
                     0L,
                     false,
-                    "正在搜索爱车钥匙...",
-                    "-- dBm · 解锁门限 " + formatDbm(unlockDbm)
+                    sessionLocked ? "已离开车辆 · 门锁已闭锁" : "正在搜索爱车钥匙...",
+                    sessionLocked ? ("门锁已闭锁 · " + formatDbm(lockDbm)) : ("-- dBm · 解锁门限 " + formatDbm(unlockDbm))
             );
         }
 
@@ -90,7 +109,34 @@ public final class RadarVisualModel {
 
         wasHot = false;
 
-        if (rssi >= -84) {
+        // 离开与锁车优先级高于机械靠近：已闭锁且未达到近场解锁线，稳定保持闭锁展示
+        if (sessionLocked) {
+            return new State(
+                    TemperatureState.COLD,
+                    PaseoTheme.COLOR_INFO,
+                    PaseoTheme.COLOR_INFO_CONTAINER,
+                    PULSE_SLOW_MS,
+                    false,
+                    "已离开车辆 · 门锁已闭锁",
+                    "实时 " + rssi + " dBm · 门锁已安全闭锁"
+            );
+        }
+
+        if (dwellElapsedMs > 0L) {
+            long totalDwell = lockDwellMs > 0L ? lockDwellMs : 4500L;
+            return new State(
+                    TemperatureState.WARM,
+                    PaseoTheme.COLOR_IDENTITY_ORANGE,
+                    PaseoTheme.COLOR_WARNING_CONTAINER,
+                    PULSE_MID_MS,
+                    false,
+                    "正在远离爱车...",
+                    String.format(Locale.US, "离开确认 %.1fs / %.1fs · %d dBm",
+                            dwellElapsedMs / 1000.0f, totalDwell / 1000.0f, rssi)
+            );
+        }
+
+        if (rssi > lockDbm) {
             // 中场渐温逼近
             return new State(
                     TemperatureState.WARM,
@@ -103,7 +149,7 @@ public final class RadarVisualModel {
             );
         }
 
-        // 远场深蓝
+        // 远场深蓝静态展示（无驻留进行时）
         return new State(
                 TemperatureState.COLD,
                 PaseoTheme.COLOR_INFO,
@@ -111,7 +157,7 @@ public final class RadarVisualModel {
                 PULSE_SLOW_MS,
                 false,
                 "距离爱车较远",
-                "实时 " + rssi + " dBm · 门限 " + formatDbm(unlockDbm)
+                "实时 " + rssi + " dBm · 门限 " + formatDbm(lockDbm)
         );
     }
 

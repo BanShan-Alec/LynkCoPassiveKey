@@ -113,6 +113,12 @@ public class KeyNotificationBridgeService extends NotificationListenerService {
         return lastObservedLockHint;
     }
 
+    public static synchronized String consumeLastObservedLockHint() {
+        String hint = lastObservedLockHint;
+        lastObservedLockHint = "";
+        return hint;
+    }
+
     public static String getLastButtonCaptureDiag() {
         return lastButtonCaptureDiag;
     }
