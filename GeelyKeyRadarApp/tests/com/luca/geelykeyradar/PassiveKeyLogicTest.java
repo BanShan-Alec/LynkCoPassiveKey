@@ -40,7 +40,55 @@ public final class PassiveKeyLogicTest {
         unattemptedTimeoutDoesNotExhaustUnlockQuota();
         nearOfficialConnectionTriggersLateArrivalUnlock();
         actualAttemptFailureConsumesQuota();
+        officialConnectedLocksEvenWithoutPriorNear();
+        disconnectedSilenceNeverLocksWithoutNear();
+        manualLockSuppressesDuplicateLock();
         System.out.println("PassiveKeyLogicTest passed");
+    }
+
+    /** 官方蓝牙已连接时，即便冷启动未曾有近场痕迹，满足远场驻留也必须坚决上锁，消除走远未锁隐患。 */
+    private static void officialConnectedLocksEvenWithoutPriorNear() {
+        PassiveKeyLogic logic = new PassiveKeyLogic();
+        // 官方蓝牙已连接，人在远场持续采集样本
+        check(logic.onSample(-85f, 1_000L, true, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "第 1 帧驻留未满不得上锁");
+        check(logic.onSample(-85f, 3_000L, true, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "第 2 帧驻留未满不得上锁");
+        check(logic.onSample(-85f, 5_600L, true, false, true, true) == PassiveKeyLogic.Action.LOCK,
+                "官方蓝牙已连接且远场驻留满 4.5s 应坚决上锁");
+        check("LOCK_DWELL_READY".equals(logic.getLastSampleDecision()),
+                "判定分支应为 LOCK_DWELL_READY");
+    }
+
+    /** 官方蓝牙断开且从未靠近过车辆时，冷启动弱信号绝对不上锁（防误锁）。 */
+    private static void disconnectedSilenceNeverLocksWithoutNear() {
+        PassiveKeyLogic logic = new PassiveKeyLogic();
+        // 官方蓝牙未连接
+        check(logic.onSample(-85f, 1_000L, false, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "无官方连接不得上锁");
+        check(logic.onSample(-85f, 6_000L, false, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "无官方连接且无近场痕迹不得上锁");
+        check("NO_NEAR_EVIDENCE".equals(logic.getLastSampleDecision()),
+                "判定分支必须保持 NO_NEAR_EVIDENCE");
+    }
+
+    /** 主动上锁或本轮完成上锁后，持续远场弱信号不应再次触发上锁。 */
+    private static void manualLockSuppressesDuplicateLock() {
+        PassiveKeyLogic logic = new PassiveKeyLogic();
+        // 触发并完成一次上锁
+        logic.onSample(-85f, 1_000L, true, false, true, true);
+        logic.onSample(-85f, 3_000L, true, false, true, true);
+        PassiveKeyLogic.Action lockAction = logic.onSample(-85f, 5_600L, true, false, true, true);
+        if (lockAction == PassiveKeyLogic.Action.LOCK) {
+            logic.onControlSent(PassiveKeyLogic.Action.LOCK, 5_700L);
+        } else {
+            logic.onManualLocked(5_700L);
+        }
+        // 持续处于远场弱信号
+        check(logic.onSample(-86f, 10_000L, true, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "上锁完成后不得再次重复上锁");
+        check(logic.onSample(-88f, 15_000L, true, false, true, true) == PassiveKeyLogic.Action.NONE,
+                "信号持续衰减也不得重复上锁");
     }
 
     /** 一次接近完成解锁后，不因持续近场而重复下发。 */

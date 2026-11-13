@@ -444,6 +444,18 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         appendLog("远离自动上锁: " + (enabled ? "开" : "关"));
     }
 
+    /** 车主手动上锁或外部确认已锁后调用：收敛状态机为已锁闭，走远不再重复触发闭锁。 */
+    public void reportManualLocked() {
+        long now = SystemClock.elapsedRealtime();
+        if (pendingControl.getAction() == PassiveKeyLogic.Action.LOCK) {
+            cancelPendingControl("已确认手动上锁");
+        }
+        logic.onManualLocked(now);
+        lastAction = "已确认上锁（走远不再重复闭锁）";
+        appendLog("✓ 已手动/外部确认上锁，离开闭锁会话已闭环");
+        updateNotificationIfNeeded(true);
+    }
+
     /**
      * 有线充电禁止自动上锁开关（USB/AC 有线充电时视为在车内，禁止自动上锁）。
      */
@@ -1334,6 +1346,13 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         boolean connected = isOfficialConnected();
         long now = SystemClock.elapsedRealtime();
         if (connected != geelyConnected) onGeelyConnectionChanged(connected, now);
+        String lockHint = KeyNotificationBridgeService.getLastObservedLockHint();
+        if ("LOCKED".equals(lockHint)) {
+            if (pendingControl.getAction() == PassiveKeyLogic.Action.LOCK) {
+                cancelPendingControl("官方通知显示已上锁");
+            }
+            logic.onManualLocked(now);
+        }
         processPendingControl(true);
     }
 

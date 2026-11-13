@@ -229,6 +229,13 @@ final class PassiveKeyLogic {
         }
 
         if (distanceDbm <= lockDbm) {
+            // 若官方蓝牙已连接且非失败后要求返回：官方蓝牙握手成功即证明处于现场会话。
+            // 此时即便是冷启动或未采到近场强信号，也必须激活离开上锁判定，坚决杜绝走远漏锁。
+            if (!hasBeenNear && officialConnected && !returnConfirmationRequired) {
+                hasBeenNear = true;
+                departureArmed = true;
+            }
+
             // 冷启动就在远处，或本次会话从未接近过车辆：不要凭空补一条上锁指令。
             if (!hasBeenNear) {
                 resetLockDwell();
@@ -500,6 +507,23 @@ final class PassiveKeyLogic {
             resetReturnConfirmation();
             resetDepartureEvidence();
         }
+    }
+
+    /**
+     * 用户手动在界面上锁、或检测到外部已锁车时调用：
+     * 立即将状态机收敛为已锁闭离开态，重置驻留与待发动作，防止后续远场继续重复发锁。
+     */
+    synchronized void onManualLocked(long nowMs) {
+        pendingAction = Action.NONE;
+        approachLatched = false;
+        hasBeenNear = false;
+        farSinceMs = 0L;
+        lastUnlockAtMs = nowMs;
+        resetLockDwell();
+        returnConfirmationRequired = true;
+        resetReturnConfirmation();
+        resetDepartureEvidence();
+        lastControlFeedback = "MANUAL_LOCKED";
     }
 
     /** 发送失败或条件失效时撤销待发标记，保留近车证据，并限制同一会话的补发次数。 */
