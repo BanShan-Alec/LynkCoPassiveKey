@@ -208,6 +208,8 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         public float unlockDbm;
         public float lockDbm;
         public long lockDwellMs;
+        public long lockDwellElapsedMs = 0L;
+        public boolean sessionLocked = false;
         public int rssi = -127;
         public int unlockCount;
         public int lockCount;
@@ -379,6 +381,9 @@ public class PassiveKeyService extends Service implements SensorEventListener {
         status.unlockDbm = unlockDbm;
         status.lockDbm = lockDbm;
         status.lockDwellMs = lockDwellMs;
+        long dwellStart = logic.getLockDwellStartMs();
+        status.lockDwellElapsedMs = (dwellStart > 0L && signalFresh) ? Math.max(0L, now - dwellStart) : 0L;
+        status.sessionLocked = logic.isSessionLocked();
         status.rssi = signalFresh ? lastRawRssi : -127;
         status.unlockCount = unlockCount;
         status.lockCount = lockCount;

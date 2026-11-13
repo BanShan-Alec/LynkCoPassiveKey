@@ -620,6 +620,11 @@ final class PassiveKeyLogic {
         return lastSampleAtMs;
     }
 
+    /** 返回当前是否处于上锁完成后的离开闭锁态。 */
+    synchronized boolean isSessionLocked() {
+        return returnConfirmationRequired;
+    }
+
     /** 返回持续远场的起始时间。 */
     synchronized long getFarSinceMs() {
         return farSinceMs;

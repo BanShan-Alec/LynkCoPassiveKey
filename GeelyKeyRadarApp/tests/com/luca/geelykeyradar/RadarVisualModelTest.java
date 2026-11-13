@@ -11,7 +11,24 @@ public final class RadarVisualModelTest {
         testWarmApproaching();
         testHotUnlockAndSingleHaptic();
         testChargingProtection();
+        testDepartingDwellDisplaysLeavingAndCountdown();
+        testLockedCompletedState();
         System.out.println("RadarVisualModelTest passed");
+    }
+
+    private static void testDepartingDwellDisplaysLeavingAndCountdown() {
+        RadarVisualModel model = new RadarVisualModel();
+        // 人在离开，驻留进行到 2.5 秒，总驻留 4.5 秒，信号 -85 dBm
+        RadarVisualModel.State s = model.evaluate(true, true, true, -85, false, -75f, -82f, 2500L, 4500L, false);
+        assert "正在远离爱车...".equals(s.statusText) : "处于离开驻留时文案必须为「正在远离爱车...」，实际为：" + s.statusText;
+        assert s.secondaryTechText.contains("离开确认 2.5s / 4.5s") : "副文本必须包含离开确认倒计时，实际为：" + s.secondaryTechText;
+    }
+
+    private static void testLockedCompletedState() {
+        RadarVisualModel model = new RadarVisualModel();
+        // 上锁已完成离开态
+        RadarVisualModel.State s = model.evaluate(true, true, true, -88, false, -75f, -82f, 0L, 4500L, true);
+        assert "已离开车辆 · 门锁已闭锁".equals(s.statusText) : "闭锁完成后必须显示「已离开车辆 · 门锁已闭锁」，实际为：" + s.statusText;
     }
 
     private static void testDisconnected() {
